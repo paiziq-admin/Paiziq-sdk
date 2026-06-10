@@ -1,0 +1,40 @@
+---
+description: Mandatory change workflow for every Paiziq change (code, docs, config)
+alwaysApply: true
+---
+
+# Paiziq Change Workflow — STRICT
+
+These rules are mandatory for every collaborator and every agent.
+
+## Environment
+
+- Always use `python3` and `pip3`. Never bare `python`/`pip`.
+- Use the Makefile (`files/paiziq/Makefile`) for all tasks: `make help`
+  lists targets. Do not hand-roll commands that a target already covers.
+
+## Every change MUST ship with, in the same commit/PR
+
+1. **Tests** — new behavior gets a test; changed behavior gets its test
+   updated. `make check` must pass before the work is declared done.
+2. **CHANGELOG entry** — add a bullet to `files/paiziq/CHANGELOG.md`
+   under the target version heading (Keep a Changelog format,
+   ISO dates). No silent changes.
+3. **Tracker update** — if the change starts or completes a planned item,
+   update `files/paiziq/docs/05_PROGRESS_TRACKER.md` (status + verification log).
+
+## Versioning
+
+- Semantic versioning. Single source of truth: `sdk/pyproject.toml`;
+  mirror in `paiziq.__version__` (`sdk/src/paiziq/__init__.py`).
+  The two must never diverge.
+- New public API must be re-exported from the top-level `paiziq`
+  package and covered by a test or example.
+
+## Forbidden
+
+- Committing secrets, real card numbers, SSNs, or live API keys —
+  test fixtures construct sensitive-looking strings at runtime.
+- Deleting or rewriting audit-store records, CHANGELOG history,
+  or tracker verification-log rows.
+- Declaring work complete while `make check` is red.

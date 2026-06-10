@@ -1,0 +1,111 @@
+"""Paiziq trace-ingest service (minimum viable cloud, build plan Week 3).
+
+Endpoints (wire contract v1, see docs/02_ARCHITECTURE.md section 6):
+
+    GET  /health                       liveness probe
+    POST /v1/traces                    {"spans": [...]}  idempotent upsert
+    POST /v1/notifications             notification webhook body
+    GET  /v1/traces/{trace_id}         spans for one trace (dashboard/dev)
+    GET  /v1/notifications             recent notifications (dashboard/dev)
+
+Auth: per-customer API keys via the Authorization header
+("Bearer <key>"). Keys come from the PAIZIQ_INGEST_KEYS env var
+(comma-separated); the default "dev-key" is for local development only.
+
+Run locally:
+    pip3 install -r requirements.txt
+    uvicorn app:app --reload --port 8800
+"""
+
+from __future__ import annotations
+
+import os
+from typing import Any, Optional
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from pydantic import BaseModel, Field
+
+from storage import IngestStore
+
+MAX_BODY_BYTES = 1_000_000  # request size limit per build plan
+MAX_SPANS_PER_BATCH = 500
+
+app = FastAPI(title="Paiziq Ingest API", version="1.0")
+store = IngestStore(os.getenv("PAIZIQ_INGEST_DB", ":memory:"))
+
+
+def _valid_keys() -> set[str]:
+    raw = os.getenv("PAIZIQ_INGEST_KEYS", "dev-key")
+    return {k.strip() for k in raw.split(",") if k.strip()}
+
+
+def require_api_key(authorization: Optional[str] = Header(default=None)) -> str:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing API key")
+    key = authorization.split(" ", 1)[1].strip()
+    if key not in _valid_keys():
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    return key
+
+
+async def enforce_size_limit(request: Request) -> None:
+    length = request.headers.get("content-length")
+    if length and int(length) > MAX_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="Request body too large")
+
+
+class SpanIn(BaseModel):
+    name: str
+    trace_id: str
+    span_id: str
+    parent_span_id: Optional[str] = None
+    start_ms: Optional[int] = None
+    end_ms: Optional[int] = None
+    duration_ms: Optional[int] = None
+    status: str = "ok"
+    attributes: dict[str, Any] = Field(default_factory=dict)
+    events: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class TraceBatch(BaseModel):
+    spans: list[SpanIn]
+
+
+class NotificationIn(BaseModel):
+    severity: str
+    title: str
+    message: str = ""
+    request_id: Optional[str] = None
+    risk_flags: list[str] = Field(default_factory=list)
+    created_at_ms: Optional[int] = None
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.post("/v1/traces", dependencies=[Depends(enforce_size_limit)])
+def ingest_traces(batch: TraceBatch, api_key: str = Depends(require_api_key)) -> dict[str, Any]:
+    if len(batch.spans) > MAX_SPANS_PER_BATCH:
+        raise HTTPException(status_code=413, detail="Too many spans in one batch")
+    accepted = store.upsert_spans([s.model_dump() for s in batch.spans])
+    return {"accepted": accepted}
+
+
+@app.post("/v1/notifications", dependencies=[Depends(enforce_size_limit)])
+def ingest_notification(
+    notification: NotificationIn, api_key: str = Depends(require_api_key)
+) -> dict[str, str]:
+    store.add_notification(notification.model_dump())
+    return {"status": "accepted"}
+
+
+@app.get("/v1/traces/{trace_id}")
+def get_trace(trace_id: str, api_key: str = Depends(require_api_key)) -> dict[str, Any]:
+    return {"trace_id": trace_id, "spans": store.spans_for_trace(trace_id)}
+
+
+@app.get("/v1/notifications")
+def list_notifications(api_key: str = Depends(require_api_key)) -> dict[str, Any]:
+    return {"notifications": store.notifications()}

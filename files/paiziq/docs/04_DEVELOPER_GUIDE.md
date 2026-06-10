@@ -1,0 +1,114 @@
+# Paiziq Developer Guide
+
+Audience: engineers contributing to the Paiziq SDK or the ingest
+service. Read `01_EXECUTIVE_SCOPE.md` for the why, `02_ARCHITECTURE.md`
+for the how, `03_BUILD_DEPLOY_PLAN.md` for the when. This guide covers
+day-to-day development. Implementation status lives in
+`05_PROGRESS_TRACKER.md`; per-version change history in `../CHANGELOG.md`.
+
+## 1. Repository layout
+
+```
+paiziq/
+├── Makefile                  # all automated commands (make help)
+├── CHANGELOG.md              # versioned, per-change history
+├── docs/                     # scope, architecture, plan, guide, tracker
+├── sdk/                      # the pip-installable `paiziq` package
+│   ├── pyproject.toml        # version, extras: redis/postgres/dev/...
+│   ├── src/paiziq/
+│   │   ├── models.py         # PaymentRequest, Mandate, AuditRecord...
+│   │   ├── sdk.py            # PaiziqSDK facade (review/execute)
+│   │   ├── engine/           # decision rules, policy, budget stores
+│   │   ├── audit/            # audit stores + payment gateways
+│   │   └── tracing/          # tracer, exporters, PII scrubbing
+│   ├── tests/                # pytest suite (unit, property, concurrency)
+│   └── examples/             # runnable end-to-end examples
+└── services/ingest/          # FastAPI trace-ingest service
+    ├── app.py                # endpoints, auth, limits
+    ├── storage.py            # SQLite IngestStore (swap for RDS later)
+    └── tests/
+```
+
+## 2. Getting started
+
+```bash
+make venv          # python3 -m venv sdk/.venv
+make install       # editable install with dev extras
+make test          # SDK test suite
+make ingest-install ingest-test   # ingest service deps + tests
+```
+
+Everything is automated through the Makefile; run `make help` to list
+every target. CI (`.github/workflows/ci.yml`) runs the same targets'
+commands on every push and pull request.
+
+## 3. Daily workflow
+
+1. Branch from `main`.
+2. Make your change. Follow the architecture invariants below.
+3. `make check` — lint, SDK tests, ingest tests, examples.
+4. Add a bullet under the `Unreleased`/next version heading in
+   `CHANGELOG.md` describing the change.
+5. Update `docs/05_PROGRESS_TRACKER.md` if your change completes or
+   starts a planned work item.
+6. Open a PR; CI must be green.
+
+## 4. Architecture invariants (do not break)
+
+- **Zero-dependency core.** `sdk/src/paiziq` imports only the standard
+  library at module import time. Integrations with optional packages
+  (redis, psycopg, httpx, frameworks) must lazy-import inside
+  functions/constructors and be exposed as pip extras.
+- **Deterministic decisions.** Every rule verdict carries
+  machine-readable `reasons`. No nondeterministic input (LLM calls,
+  wall-clock randomness) inside `engine/`.
+- **Observability never breaks the agent.** Exporters and scrubbers
+  swallow and log their own failures.
+- **Append-only audit.** Audit stores expose `append` and queries; no
+  update or delete operations.
+- **Enforcement at the tool boundary.** Framework wrappers gate the
+  payment tool call; they do not try to police the model's text.
+
+## 5. Versioning and documentation rules
+
+- Semantic versioning. The single source of truth is
+  `sdk/pyproject.toml`; mirror it in `paiziq.__version__`.
+- Every behavior change lands with: code + tests + a CHANGELOG entry
+  under the target version + tracker update.
+- New public API must be re-exported from the top-level `paiziq`
+  package and covered by at least one example or test.
+
+## 6. Testing conventions
+
+- Unit tests live next to the feature area (`test_engine.py`,
+  `test_tracing.py`, `test_production_stores.py`, ...).
+- Production-store tests use fakes (FakeRedis, SQLite as DB-API) — no
+  live services needed; `make test` must pass offline.
+- Property-based tests (Hypothesis) guard rule totality; concurrency
+  tests guard the budget ledger and exporters.
+- Ingest service tests use FastAPI's TestClient and verify the wire
+  contract against the SDK's `Span.to_dict()` output.
+
+## 7. Running the ingest service
+
+```bash
+make ingest-run        # uvicorn on http://127.0.0.1:8800
+```
+
+Auth uses Bearer API keys from the `PAIZIQ_INGEST_KEYS` env var
+(comma-separated; defaults to `dev-key` for local development).
+Storage defaults to in-memory SQLite; set `PAIZIQ_INGEST_DB=/path.db`
+to persist.
+
+```bash
+curl -s -X POST http://127.0.0.1:8800/v1/traces \
+  -H 'Authorization: Bearer dev-key' -H 'Content-Type: application/json' \
+  -d '{"spans": [{"name": "paiziq.review_payment", "trace_id": "tr1", "span_id": "s1"}]}'
+```
+
+## 8. Releasing
+
+1. Bump the version in `sdk/pyproject.toml` and `paiziq/__init__.py`.
+2. Move CHANGELOG entries under the new version heading with the date.
+3. `make check && make build` — artifacts land in `sdk/dist/`.
+4. Tag and push; CI uploads the dist artifact.

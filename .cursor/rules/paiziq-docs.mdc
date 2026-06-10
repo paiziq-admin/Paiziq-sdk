@@ -1,0 +1,23 @@
+---
+description: Documentation update rules for Paiziq docs, CHANGELOG, and tracker
+globs: files/paiziq/**/*.md,files/paiziq/docs/**
+alwaysApply: false
+---
+
+# Paiziq Documentation Rules — STRICT
+
+- Docs are numbered and have fixed roles. Do not create overlapping docs:
+  - `docs/01_*` scope · `02_ARCHITECTURE.md` design · `03_BUILD_DEPLOY_PLAN.md`
+    plan · `04_DEVELOPER_GUIDE.md` how-to · `05_PROGRESS_TRACKER.md` status
+  - `CHANGELOG.md` per-change history · `README.md` landing page
+- Every behavior change is documented **with its version** in
+  `CHANGELOG.md` (Keep a Changelog headings, ISO dates `YYYY-MM-DD`).
+- The tracker (`05_PROGRESS_TRACKER.md`) must stay human-readable:
+  status tables use ✅ / 🔄 / ⬜ and the verification log is append-only
+  (`| date | version | gate | result |`).
+- Keep code snippets in docs runnable against the current API — if a
+  public signature changes, update every doc snippet that uses it and
+  the docs site (`docs/site/`) in the same change.
+- Shell examples always use `python3` / `pip3`.
+- The docs site under `docs/site/` is generated from real SDK behavior;
+  never document invented endpoints, params, or version numbers.

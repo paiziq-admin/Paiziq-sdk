@@ -1,0 +1,15 @@
+{
+  "folders": [
+    {
+      "name": "paiziq-backend",
+      "path": "."
+    },
+    {
+      "name": "Paiziq-Dashboard",
+      "path": "../Paiziq-Dashboard"
+    }
+  ],
+  "settings": {
+    "git.autoRepositoryDetection": true
+  }
+}

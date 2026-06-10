@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paiziq"
+version = "0.2.0"
+description = "Paiziq Agent Audit Tracer SDK — verifiable-intent auditing, 4-way match policy, and payment decisioning for AI payment agents."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "Paiziq" }]
+keywords = ["ai-agents", "payments", "observability", "audit", "tracing", "verifiable-intent"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Libraries",
+  "Topic :: System :: Monitoring",
+]
+# Core SDK is intentionally dependency-free (stdlib only) so it can sit on
+# top of any orchestration framework without version conflicts.
+dependencies = []
+
+[project.optional-dependencies]
+langchain = ["langchain-core>=0.2"]
+openai = ["openai>=1.30"]
+http = ["httpx>=0.27"]
+redis = ["redis>=5"]
+postgres = ["psycopg[binary]>=3.1"]
+dev = [
+  "pytest>=8",
+  "pytest-cov>=5",
+  "ruff>=0.4",
+  "mypy>=1.10",
+  "build>=1.2",
+  "hypothesis>=6",
+]
+
+[project.urls]
+Homepage = "https://paiziq.example.com"
+Dashboard = "https://app.paiziq.example.com"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+ignore_missing_imports = true

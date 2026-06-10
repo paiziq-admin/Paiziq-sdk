@@ -1,0 +1,43 @@
+---
+description: Architecture invariants for the Paiziq SDK core — never break these
+globs: files/paiziq/sdk/src/**
+alwaysApply: false
+---
+
+# Paiziq SDK Core Invariants — STRICT
+
+Violating any invariant is grounds for rejecting the change.
+
+1. **Zero-dependency core.** `sdk/src/paiziq` imports only the Python
+   standard library at module import time. Optional packages (redis,
+   psycopg, httpx, langchain, openai) are lazy-imported inside
+   functions/constructors and exposed as pip extras in `pyproject.toml`.
+
+```python
+# ❌ BAD — module-level third-party import
+import redis
+
+# ✅ GOOD — lazy import with install guidance
+try:
+    import redis
+except ImportError as exc:
+    raise ImportError("Install with: pip3 install 'paiziq[redis]'") from exc
+```
+
+2. **Deterministic decisions.** No LLM calls, randomness, or wall-clock
+   branching inside `engine/`. Every rule verdict carries
+   machine-readable `reasons`. Same input + same policy = same verdict.
+
+3. **Observability never breaks the agent.** Exporters, scrubbers, and
+   notifiers catch and log their own failures; they never raise into
+   the host agent's payment path.
+
+4. **Append-only audit.** Audit stores expose `append` and queries
+   only. Never add update/delete operations.
+
+5. **Enforcement at the tool boundary.** Framework wrappers gate the
+   payment tool call itself; do not add logic that polices model text.
+
+6. **Protocol seams.** New stores/gateways/notifiers implement the
+   existing protocols (`BudgetStore`, `AuditStore`, `PaymentGateway`,
+   `Notifier`, `Exporter`) — accept injected clients for testability.
