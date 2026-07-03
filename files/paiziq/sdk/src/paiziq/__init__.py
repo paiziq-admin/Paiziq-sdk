@@ -21,6 +21,12 @@ from .models import (
 )
 from .sdk import PaiziqSDK
 from .tracing.scrub import PIIScrubber, ScrubbingExporter
+from .transport import (
+    AsyncHTTPTransport,
+    RetryPolicy,
+    TransportError,
+    TransportResponse,
+)
 from .tracing.integrations import (
     PaymentBlockedError,
     create_langchain_handler,
@@ -45,6 +51,10 @@ __all__ = [
     "DecisionStatus",
     "RiskFlag",
     "ExecutionResult",
+    "AsyncHTTPTransport",
+    "RetryPolicy",
+    "TransportError",
+    "TransportResponse",
     "PaymentBlockedError",
     "instrument_payment_tool",
     "create_langchain_handler",

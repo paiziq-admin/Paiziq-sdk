@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- SDK async HTTP transport (PZ-032): stdlib-only `paiziq.transport`
+  module with `AsyncHTTPTransport` (blocking `urllib` I/O in an
+  executor, `asyncio.sleep` backoff), a shared `RetryPolicy` (bounded
+  exponential backoff with jitter; retries 429/5xx and connection
+  errors, fails fast on other 4xx), `TransportResponse`, and
+  `TransportError`. All re-exported from the top-level `paiziq`
+  package.
 - SDK domain-model validation (PZ-028): `PaymentRequest`, `Mandate`,
   and `PaymentPolicy` now reject malformed input at construction with
   clear `ValueError`s — positive finite amounts, 3-letter ISO 4217
