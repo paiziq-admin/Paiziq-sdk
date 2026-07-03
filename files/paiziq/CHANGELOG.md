@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- SDK structured logging + debug mode (PZ-036): stdlib-only
+  `paiziq.logging` helper with `get_logger` (namespaced under
+  `paiziq.*`), `log_event` (structured `key=value` records with
+  unconditional secret redaction — api keys/tokens/secrets never reach
+  a log line), and a `paiziq.debug()` toggle that enables verbose
+  decision/transport logs. All re-exported from `paiziq`.
 - SDK safe failure modes (PZ-035): `FailureMode` enum (`fail_open` /
   `fail_closed` / `review_required`) on the `PaiziqSDK` facade. When
   the decision engine raises unexpectedly, the SDK maps the failure to

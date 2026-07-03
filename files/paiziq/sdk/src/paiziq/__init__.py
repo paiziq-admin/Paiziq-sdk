@@ -10,6 +10,7 @@ Integrations:
 from . import api_types
 from .audit.postgres import PostgresAuditStore
 from .engine.policy import BudgetTracker, PaymentPolicy
+from .logging import debug, get_logger, is_debug, log_event
 from .engine.stores import RedisBudgetStore
 from .models import (
     Decision,
@@ -54,6 +55,10 @@ __all__ = [
     "FailureMode",
     "RiskFlag",
     "ExecutionResult",
+    "debug",
+    "get_logger",
+    "is_debug",
+    "log_event",
     "AsyncHTTPTransport",
     "SyncHTTPTransport",
     "RetryPolicy",

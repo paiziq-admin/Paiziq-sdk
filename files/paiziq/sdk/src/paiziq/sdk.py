@@ -21,6 +21,7 @@ from .audit import AuditStore, InMemoryAuditStore, MockGateway, PaymentGateway
 from .engine.audit4 import FourWayAuditor, transaction_snapshot
 from .engine.engine import DecisionEngine
 from .engine.policy import BudgetTracker, PaymentPolicy
+from .logging import log_event
 from .models import (
     AuditRecord,
     Decision,
@@ -102,6 +103,16 @@ class PaiziqSDK:
             except Exception as exc:
                 decision = self._failure_decision(request, exc)
             self._reviewed[request.request_id] = (decision, transaction_snapshot(request))
+            log_event(
+                logger,
+                "decision",
+                level=logging.DEBUG,
+                request_id=request.request_id,
+                status=decision.status.value,
+                merchant=request.merchant,
+                amount=request.amount,
+                currency=request.currency,
+            )
             span.set_attribute("paiziq.decision", decision.status.value)
             span.set_attribute("paiziq.risk_flags", [f.value for f in decision.risk_flags])
             span.add_event("decision", decision.to_dict())
