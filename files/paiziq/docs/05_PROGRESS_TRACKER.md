@@ -76,7 +76,7 @@ product task list; statuses update as each item starts/completes.
 | PZ-011 | Organization & environment management APIs | ✅ | `routers/orgs.py`, `stores/orgs.py` |
 | PZ-012 | Agent registration & metadata APIs | ✅ | `routers/agents.py`, `stores/agents.py` |
 | PZ-013 | API key create/display-once/rotate/revoke | ✅ | `routers/keys.py`, `stores/keys.py`, migration `0003` |
-| PZ-016 | Payment proposal persistence + state transitions | ⬜ | |
+| PZ-016 | Payment proposal persistence + state transitions | ✅ | `routers/payments.py`, `stores/payments.py` |
 | PZ-017 | Decision engine service boundary | ⬜ | |
 
 ## Phase 2 — Pilot Readiness
@@ -114,3 +114,4 @@ product task list; statuses update as each item starts/completes.
 | 2026-07-03 | unreleased | `make check` after PZ-011 (69 SDK + 40 ingest tests, examples); mypy clean | all passed |
 | 2026-07-03 | unreleased | `make check` after PZ-012 (69 SDK + 49 ingest tests, examples); mypy clean | all passed |
 | 2026-07-03 | unreleased | `make check` after PZ-013 (69 SDK + 61 ingest tests, examples); mypy clean | all passed |
+| 2026-07-03 | unreleased | `make check` after PZ-016 (69 SDK + 71 ingest tests, examples); mypy clean | all passed |

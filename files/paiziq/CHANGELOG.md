@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Payment proposal persistence and state transitions (PZ-016):
+  `POST /v1/payments` (tenancy-checked, `Idempotency-Key` replay
+  returns the original payment), `GET /v1/payments` with
+  `env_id`/`agent_id`/`state` filters, `GET /v1/payments/{id}` including
+  the append-only `transitions` history, and
+  `POST /v1/payments/{id}/transition` enforcing the server-side state
+  machine (`proposed → approved/needs_review/rejected`,
+  `approved → executed/failed`; violations → `409
+  invalid_state_transition`). Audit-log entries on create and
+  transition (`stores/payments.py`, `routers/payments.py`).
 - API key lifecycle APIs (PZ-013): `POST /v1/api-keys` (server-generated
   `pzq_<env-kind>_…` secrets stored as SHA-256 hashes, plaintext shown
   exactly once), `GET /v1/api-keys`, `POST /v1/api-keys/{id}/rotate`

@@ -218,10 +218,10 @@ Agent:
 
 | Endpoint | Status |
 | --- | --- |
-| `POST /v1/payments` | ⬜ (phase 3) |
-| `GET /v1/payments` (filters: `env_id`, `agent_id`, `state`) | ⬜ (phase 3) |
-| `GET /v1/payments/{payment_id}` | ⬜ (phase 3) |
-| `POST /v1/payments/{payment_id}/transition` | ⬜ (phase 3) |
+| `POST /v1/payments` | ✅ |
+| `GET /v1/payments` (filters: `env_id`, `agent_id`, `state`) | ✅ |
+| `GET /v1/payments/{payment_id}` | ✅ |
+| `POST /v1/payments/{payment_id}/transition` | ✅ |
 
 Payment proposal:
 

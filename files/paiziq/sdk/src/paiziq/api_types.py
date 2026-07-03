@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
-__all__ = ['AgentPatch', 'AgentRegister', 'EnvironmentCreate', 'HTTPValidationError', 'KeyCreate', 'KeyRotate', 'NotificationIn', 'OrgCreate', 'SpanIn', 'TraceBatch', 'ValidationError']
+__all__ = ['AgentPatch', 'AgentRegister', 'EnvironmentCreate', 'HTTPValidationError', 'KeyCreate', 'KeyRotate', 'NotificationIn', 'OrgCreate', 'PaymentCreate', 'SpanIn', 'TraceBatch', 'TransitionIn', 'ValidationError']
 
 
 class AgentPatch(TypedDict, total=False):
@@ -64,6 +64,20 @@ class OrgCreate(TypedDict):
     name: str
 
 
+class _PaymentCreateRequired(TypedDict):
+    env_id: str
+    agent_id: str
+    principal_id: str
+    merchant: str
+    amount: float
+
+
+class PaymentCreate(_PaymentCreateRequired, total=False):
+    currency: str
+    intent_description: str
+    request_id: str | None
+
+
 class _SpanInRequired(TypedDict):
     name: str
     trace_id: str
@@ -82,6 +96,14 @@ class SpanIn(_SpanInRequired, total=False):
 
 class TraceBatch(TypedDict):
     spans: list[SpanIn]
+
+
+class _TransitionInRequired(TypedDict):
+    to: str
+
+
+class TransitionIn(_TransitionInRequired, total=False):
+    reason: str | None
 
 
 class _ValidationErrorRequired(TypedDict):

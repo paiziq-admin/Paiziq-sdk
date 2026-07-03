@@ -30,7 +30,7 @@ from pydantic import BaseModel, Field
 import deps
 from auth import require_api_key, settings
 from envelope import install_error_handlers
-from routers import agents, keys, orgs
+from routers import agents, keys, orgs, payments
 from storage import IngestStore
 
 app = FastAPI(title="Paiziq Ingest API", version="1.0")
@@ -40,6 +40,7 @@ deps.init_stores(store.connection, store.lock)
 app.include_router(orgs.router)
 app.include_router(agents.router)
 app.include_router(keys.router)
+app.include_router(payments.router)
 
 
 async def enforce_size_limit(request: Request) -> None:

@@ -15,18 +15,21 @@ from audit import AuditLog
 from stores.agents import AgentStore
 from stores.keys import KeyStore
 from stores.orgs import OrgStore
+from stores.payments import PaymentStore
 
 _org_store: Optional[OrgStore] = None
 _agent_store: Optional[AgentStore] = None
 _key_store: Optional[KeyStore] = None
+_payment_store: Optional[PaymentStore] = None
 _audit_log: Optional[AuditLog] = None
 
 
 def init_stores(conn: sqlite3.Connection, lock: threading.Lock) -> None:
-    global _org_store, _agent_store, _key_store, _audit_log
+    global _org_store, _agent_store, _key_store, _payment_store, _audit_log
     _org_store = OrgStore(conn, lock)
     _agent_store = AgentStore(conn, lock)
     _key_store = KeyStore(conn, lock)
+    _payment_store = PaymentStore(conn, lock)
     _audit_log = AuditLog(conn, lock)
 
 
@@ -43,6 +46,11 @@ def get_agent_store() -> AgentStore:
 def get_key_store() -> KeyStore:
     assert _key_store is not None, "init_stores() not called"
     return _key_store
+
+
+def get_payment_store() -> PaymentStore:
+    assert _payment_store is not None, "init_stores() not called"
+    return _payment_store
 
 
 def get_audit_log() -> AuditLog:
