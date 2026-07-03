@@ -81,6 +81,7 @@ product task list; statuses update as each item starts/completes.
 | PZ-028 | SDK domain model validation | ✅ | `models.py`, `engine/policy.py` `__post_init__` validation |
 | PZ-032 | SDK async HTTP transport (retries/backoff) | ✅ | `transport.py` (`AsyncHTTPTransport`, `RetryPolicy`) |
 | PZ-033 | SDK sync HTTP transport (retries) | ✅ | `transport.py` (`SyncHTTPTransport`); optional in `HTTPExporter` |
+| PZ-035 | SDK safe failure modes | ✅ | `FailureMode` in `models.py`; mapped in `sdk.py` |
 
 ## Phase 2 — Pilot Readiness
 
@@ -122,3 +123,4 @@ product task list; statuses update as each item starts/completes.
 | 2026-07-03 | unreleased | `make check` after PZ-028 (109 SDK + 80 ingest tests, examples); mypy clean | all passed |
 | 2026-07-03 | unreleased | `make check` after PZ-032 (121 SDK + 80 ingest tests, examples); mypy clean (18 files) | all passed |
 | 2026-07-03 | unreleased | `make check` after PZ-033 (127 SDK + 80 ingest tests, examples); mypy clean | all passed |
+| 2026-07-03 | unreleased | `make check` after PZ-035 (137 SDK + 80 ingest tests, examples); mypy clean | all passed |

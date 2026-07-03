@@ -26,6 +26,7 @@ from .models import (
     Decision,
     DecisionStatus,
     ExecutionResult,
+    FailureMode,
     PaymentRequest,
 )
 from .notifications import NotificationRouter, Notifier
@@ -49,6 +50,7 @@ class PaiziqSDK:
         budget_tracker: Optional[BudgetTracker] = None,
         service_name: str = "payment-agent",
         require_review_approval: bool = True,
+        failure_mode: FailureMode = FailureMode.FAIL_CLOSED,
     ) -> None:
         api_key = api_key or os.getenv("PAIZIQ_API_KEY")
         dashboard_endpoint = dashboard_endpoint or os.getenv("PAIZIQ_ENDPOINT")
@@ -68,6 +70,7 @@ class PaiziqSDK:
         self.audit_store: AuditStore = audit_store or InMemoryAuditStore()
         self.notifications = NotificationRouter(notifiers=notifiers)
         self.require_review_approval = require_review_approval
+        self.failure_mode = FailureMode(failure_mode)
 
         # request_id -> (Decision, reviewed transaction snapshot)
         self._reviewed: dict[str, tuple[Decision, dict[str, Any]]] = {}
@@ -94,7 +97,10 @@ class PaiziqSDK:
                 "agent.id": request.agent_id,
             },
         ) as span:
-            decision = self.engine.evaluate(request)
+            try:
+                decision = self.engine.evaluate(request)
+            except Exception as exc:
+                decision = self._failure_decision(request, exc)
             self._reviewed[request.request_id] = (decision, transaction_snapshot(request))
             span.set_attribute("paiziq.decision", decision.status.value)
             span.set_attribute("paiziq.risk_flags", [f.value for f in decision.risk_flags])
@@ -195,6 +201,41 @@ class PaiziqSDK:
         self.tracer.shutdown()
 
     # ── internals ────────────────────────────────────────────────────────
+
+    _FAILURE_VERDICTS = {
+        FailureMode.FAIL_OPEN: DecisionStatus.APPROVED,
+        FailureMode.FAIL_CLOSED: DecisionStatus.REJECTED,
+        FailureMode.REVIEW_REQUIRED: DecisionStatus.NEEDS_REVIEW,
+    }
+
+    def _failure_decision(self, request: PaymentRequest, exc: Exception) -> Decision:
+        """Map an unexpected decisioning failure to a deterministic
+        verdict per the configured FailureMode (PZ-035), with a
+        machine-readable `failure_mode:*` reason and an audit entry."""
+        status = self._FAILURE_VERDICTS[self.failure_mode]
+        logger.error(
+            "paiziq decisioning failed (%s); applying %s -> %s",
+            exc, self.failure_mode.value, status.value,
+        )
+        decision = Decision(
+            request_id=request.request_id,
+            status=status,
+            reasons=[
+                f"failure_mode:{self.failure_mode.value}",
+                f"Decision engine failed unexpectedly: {type(exc).__name__}: {exc}",
+            ],
+        )
+        self._record(
+            "review",
+            request,
+            {
+                "failure_mode": self.failure_mode.value,
+                "error": f"{type(exc).__name__}: {exc}",
+                "verdict": status.value,
+            },
+        )
+        return decision
+
 
     def _record(self, event_type: str, request: PaymentRequest, payload: dict[str, Any]) -> None:
         self._record_raw(event_type, request.request_id, payload)

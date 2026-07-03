@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- SDK safe failure modes (PZ-035): `FailureMode` enum (`fail_open` /
+  `fail_closed` / `review_required`) on the `PaiziqSDK` facade. When
+  the decision engine raises unexpectedly, the SDK maps the failure to
+  a deterministic approved/rejected/needs_review verdict (default:
+  fail closed) with a machine-readable `failure_mode:*` reason and an
+  audit-trail entry, instead of raising into the agent.
 - SDK sync HTTP transport (PZ-033): `SyncHTTPTransport` shares the
   same `RetryPolicy` object as the async transport (identical
   retry/backoff semantics, injectable `sleep` for tests).

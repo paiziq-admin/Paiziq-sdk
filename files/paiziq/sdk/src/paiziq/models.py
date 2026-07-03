@@ -53,6 +53,16 @@ class DecisionStatus(str, Enum):
     REJECTED = "rejected"
 
 
+class FailureMode(str, Enum):
+    """How the SDK degrades when decisioning infrastructure fails
+    unexpectedly (PZ-035). The chosen mode maps the failure to a
+    deterministic verdict rather than raising into the agent."""
+
+    FAIL_OPEN = "fail_open"              # infrastructure failure -> approved
+    FAIL_CLOSED = "fail_closed"          # infrastructure failure -> rejected
+    REVIEW_REQUIRED = "review_required"  # infrastructure failure -> needs_review
+
+
 class RiskFlag(str, Enum):
     """Machine-readable risk flags attached to decisions and traces."""
 
