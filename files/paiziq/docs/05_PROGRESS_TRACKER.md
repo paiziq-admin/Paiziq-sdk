@@ -83,6 +83,7 @@ product task list; statuses update as each item starts/completes.
 | PZ-033 | SDK sync HTTP transport (retries) | ✅ | `transport.py` (`SyncHTTPTransport`); optional in `HTTPExporter` |
 | PZ-035 | SDK safe failure modes | ✅ | `FailureMode` in `models.py`; mapped in `sdk.py` |
 | PZ-036 | SDK structured logging + debug mode | ✅ | `logging.py` (`log_event`, `debug()`, redaction) |
+| PZ-038 | SDK webhook signature verification | ✅ | `webhooks.py` (HMAC-SHA256, replay window) |
 
 ## Phase 2 — Pilot Readiness
 
@@ -126,3 +127,4 @@ product task list; statuses update as each item starts/completes.
 | 2026-07-03 | unreleased | `make check` after PZ-033 (127 SDK + 80 ingest tests, examples); mypy clean | all passed |
 | 2026-07-03 | unreleased | `make check` after PZ-035 (137 SDK + 80 ingest tests, examples); mypy clean | all passed |
 | 2026-07-03 | unreleased | `make check` after PZ-036 (145 SDK + 80 ingest tests, examples); mypy clean (19 files) | all passed |
+| 2026-07-03 | unreleased | `make check` after PZ-038 (165 SDK + 80 ingest tests, examples); mypy clean (20 files) | all passed |

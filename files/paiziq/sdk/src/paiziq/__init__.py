@@ -23,6 +23,7 @@ from .models import (
 )
 from .sdk import PaiziqSDK
 from .tracing.scrub import PIIScrubber, ScrubbingExporter
+from .webhooks import sign_webhook_payload, verify_webhook_signature
 from .transport import (
     AsyncHTTPTransport,
     RetryPolicy,
@@ -64,6 +65,8 @@ __all__ = [
     "RetryPolicy",
     "TransportError",
     "TransportResponse",
+    "sign_webhook_payload",
+    "verify_webhook_signature",
     "PaymentBlockedError",
     "instrument_payment_tool",
     "create_langchain_handler",

@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- SDK webhook signature verification (PZ-038): `paiziq.webhooks` with
+  `verify_webhook_signature(payload, signature, secret, tolerance_s)`
+  (HMAC-SHA256 over `t=...,v1=...` headers, constant-time compare,
+  two-sided replay-window check, malformed input returns False instead
+  of raising) and `sign_webhook_payload` for producing signatures.
+  Both re-exported from `paiziq`.
 - SDK structured logging + debug mode (PZ-036): stdlib-only
   `paiziq.logging` helper with `get_logger` (namespaced under
   `paiziq.*`), `log_event` (structured `key=value` records with
