@@ -74,6 +74,14 @@ trail  = sdk.get_audit_trail(request.request_id)
 | `get_audit_trail(request_id=None, limit=100) -> list[dict]` | Immutable event history. |
 | `shutdown()` | Flush trace exporters. |
 
+Utilities shipped alongside the facade: `SyncHTTPTransport` /
+`AsyncHTTPTransport` (stdlib HTTP with shared `RetryPolicy`
+retry/backoff), `FailureMode` (`fail_open` / `fail_closed` /
+`review_required` degradation when decisioning infrastructure fails;
+default fail-closed), `paiziq.debug()` + `log_event` structured logging
+with secret redaction, and `verify_webhook_signature` /
+`sign_webhook_payload` (HMAC-SHA256 with replay-window check).
+
 ## Framework integrations
 
 **Any framework** — wrap the payment tool:
@@ -111,6 +119,7 @@ Blocked payments raise `PaymentBlockedError` carrying the full `Decision`, so th
 - **Audit store**: implement `AuditStore`; `JSONLAuditStore` ships for durable local trails.
 - **Gateways**: implement `PaymentGateway.charge()`; `MockGateway` ships for sandboxes.
 - **Notifiers**: implement `Notifier.send()`; `WebhookNotifier` ships for Slack/dashboard fan-out.
+- **Transports**: inject a custom `opener`/`RetryPolicy` into `SyncHTTPTransport`/`AsyncHTTPTransport`, or pass `transport=` to `HTTPExporter`.
 
 ## Project layout
 
@@ -126,11 +135,14 @@ paiziq/
 │   │   ├── models.py           # PaymentRequest, Decision, RiskFlag, ...
 │   │   ├── engine/             # rules, 4-way audit, policy, budget stores
 │   │   ├── tracing/            # tracer, exporters, PII scrub, integrations
+│   │   ├── transport.py        # sync/async HTTP with retry/backoff
+│   │   ├── logging.py          # structured logs, debug mode, redaction
+│   │   ├── webhooks.py         # HMAC webhook signature verification
 │   │   ├── notifications/      # harmful-intent + review alerts
 │   │   └── audit/              # audit stores + gateway abstraction
-│   ├── tests/                  # 66 unit, property-based, and e2e tests
-│   └── examples/               # happy path + framework integrations
-└── services/ingest/            # FastAPI trace-ingest service (+ 9 tests)
+│   ├── tests/                  # 165 unit, property-based, and e2e tests
+│   └── examples/               # happy path, integrations, payment agent
+└── services/ingest/            # FastAPI ingest + control plane (+ 80 tests)
 ```
 
 ## Documentation

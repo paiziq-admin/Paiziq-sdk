@@ -130,3 +130,4 @@ product task list; statuses update as each item starts/completes.
 | 2026-07-03 | unreleased | `make check` after PZ-036 (145 SDK + 80 ingest tests, examples); mypy clean (19 files) | all passed |
 | 2026-07-03 | unreleased | `make check` after PZ-038 (165 SDK + 80 ingest tests, examples); mypy clean (20 files) | all passed |
 | 2026-07-03 | unreleased | `make check` after PZ-044 (165 SDK + 80 ingest tests, 3 examples incl. payment_agent); mypy clean | all passed |
+| 2026-07-03 | unreleased | Final wrap-up gate for PZ-013–PZ-044 batch: `make check` + mypy after README/architecture/dev-guide sync | all passed |

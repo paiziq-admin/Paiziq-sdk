@@ -86,7 +86,10 @@ Payments are intercepted where the agent dispatches tools (decorator / LangChain
 | `paiziq.tracing.integrations` | Lazy framework adapters | decorator, LangChain handler, OpenAI guard, `PaymentBlockedError` |
 | `paiziq.notifications` | Decision→alert mapping, webhook delivery | `NotificationRouter`, `WebhookNotifier` |
 | `paiziq.audit` | Append-only trail + gateway abstraction | `AuditStore`, `JSONLAuditStore`, `PaymentGateway`, `MockGateway` |
-| `paiziq.sdk` | Developer facade orchestrating all of the above | `PaiziqSDK` |
+| `paiziq.transport` | Sync/async stdlib HTTP with shared retry/backoff policy | `SyncHTTPTransport`, `AsyncHTTPTransport`, `RetryPolicy`, `TransportError` |
+| `paiziq.logging` | Structured `key=value` logs, debug toggle, secret redaction | `log_event`, `debug()`, `get_logger` |
+| `paiziq.webhooks` | Inbound webhook authenticity (HMAC-SHA256 + replay window) | `verify_webhook_signature`, `sign_webhook_payload` |
+| `paiziq.sdk` | Developer facade orchestrating all of the above | `PaiziqSDK`, `FailureMode` |
 
 ## 5. Critical Flows
 
@@ -95,6 +98,8 @@ Payments are intercepted where the agent dispatches tools (decorator / LangChain
 **Execution flow.** `execute_payment` retrieves (or creates) the review, applies the human-approval override for `needs_review` if `approve_review` was recorded, then runs the 4-Way Match: identity vs mandate, intent vs mandate bounds, policy verdict, and the tamper check comparing the live payload to the reviewed snapshot. Only a fully passing audit reaches `PaymentGateway.charge()`. Spend commits to the budget ledger only after successful execution, so concurrent reviews can't double-reserve.
 
 **Trace flow.** Spans queue to a bounded buffer; a daemon thread batches (size or interval), POSTs to `{endpoint}/v1/traces` with exponential-backoff retries, and drops with a warning under sustained backpressure. The invariant throughout the SDK: observability and notification failures are logged, never raised.
+
+**Failure flow.** If the decision engine itself raises unexpectedly, `PaiziqSDK` never propagates the exception to the agent: the configured `FailureMode` maps the outage to a deterministic verdict (fail-open → approved, fail-closed → rejected — the default, review-required → needs_review) with a machine-readable `failure_mode:*` reason and an audit entry.
 
 ## 6. Data Contracts (wire-level, language-neutral)
 

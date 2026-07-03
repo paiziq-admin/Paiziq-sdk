@@ -20,11 +20,16 @@ paiziq/
 │   │   ├── sdk.py            # PaiziqSDK facade (review/execute)
 │   │   ├── engine/           # decision rules, policy, budget stores
 │   │   ├── audit/            # audit stores + payment gateways
-│   │   └── tracing/          # tracer, exporters, PII scrubbing
+│   │   ├── tracing/          # tracer, exporters, PII scrubbing
+│   │   ├── transport.py      # sync/async HTTP + RetryPolicy backoff
+│   │   ├── logging.py        # structured logging, debug(), redaction
+│   │   └── webhooks.py       # HMAC webhook signature verification
 │   ├── tests/                # pytest suite (unit, property, concurrency)
 │   └── examples/             # runnable end-to-end examples
-└── services/ingest/          # FastAPI trace-ingest service
+└── services/ingest/          # FastAPI ingest + control plane service
     ├── app.py                # endpoints, auth, limits
+    ├── routers/              # orgs, agents, keys, payments, decisions
+    ├── stores/               # per-entity SQLite stores
     ├── config.py             # env-driven settings, fail-fast validation
     ├── storage.py            # SQLite IngestStore (swap for RDS later)
     ├── migrations.py         # versioned schema migration runner
