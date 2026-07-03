@@ -8,6 +8,22 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- SDK domain-model validation (PZ-028): `PaymentRequest`, `Mandate`,
+  and `PaymentPolicy` now reject malformed input at construction with
+  clear `ValueError`s — positive finite amounts, 3-letter ISO 4217
+  currency codes (normalized to upper case), non-empty
+  agent/principal/merchant identifiers, and sane policy bounds
+  (thresholds > 0, `hard_limit >= review_threshold`,
+  `budget_warning_ratio` in (0, 1], positive budgets,
+  `max_tx_per_hour >= 1`, valid `treat_unknown_merchant_as`).
+- SDK domain-model validation (PZ-028): `PaymentRequest`, `Mandate`,
+  and `PaymentPolicy` now reject malformed input at construction with
+  clear `ValueError`s — positive finite amounts, 3-letter ISO 4217
+  currency codes (normalized to upper case), non-empty
+  agent/principal/merchant identifiers, and sane policy bounds
+  (thresholds > 0, `hard_limit >= review_threshold`,
+  `budget_warning_ratio` in (0, 1], positive budgets,
+  `max_tx_per_hour >= 1`, valid `treat_unknown_merchant_as`).
 - Decision engine service boundary (PZ-017): `POST /v1/decisions`
   evaluates a persisted payment with the deterministic SDK
   `DecisionEngine`, stores an immutable decision record (re-evaluation

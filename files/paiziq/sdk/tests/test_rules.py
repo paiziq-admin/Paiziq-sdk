@@ -41,7 +41,11 @@ def test_threshold_rejects_over_hard_limit():
 
 
 def test_threshold_rejects_non_positive_amount():
-    r = ThresholdRule().evaluate(req(amount=0), PaymentPolicy())
+    # Models refuse amount <= 0 at construction (PZ-028); mutate after
+    # construction to keep the rule's defensive branch covered.
+    request = req(amount=50)
+    request.amount = 0
+    r = ThresholdRule().evaluate(request, PaymentPolicy())
     assert r.status is DecisionStatus.REJECTED
 
 

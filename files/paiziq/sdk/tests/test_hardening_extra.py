@@ -63,7 +63,11 @@ def test_sdk_end_to_end_with_scrubbing_exporter():
 @given(amount=st.floats(min_value=-1e6, max_value=1e6, allow_nan=False, allow_infinity=False))
 def test_threshold_rule_total_and_consistent(amount):
     policy = PaymentPolicy(review_threshold=100.0, hard_limit=1000.0)
-    result = ThresholdRule().evaluate(req(amount=amount), policy)
+    # Construct valid, then mutate: models reject amount <= 0 (PZ-028)
+    # but the rule itself must stay total over any float input.
+    request = req(amount=50.0)
+    request.amount = amount
+    result = ThresholdRule().evaluate(request, policy)
     if amount <= 0:
         assert result.status is DecisionStatus.REJECTED
     elif amount > policy.hard_limit:

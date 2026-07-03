@@ -6,6 +6,8 @@ audit store, and exporters. No third-party dependencies.
 
 from __future__ import annotations
 
+import math
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -19,6 +21,28 @@ def _now_ms() -> int:
 
 def _new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex}"
+
+
+_CURRENCY_RE = re.compile(r"^[A-Za-z]{3}$")
+
+
+def _require_non_empty(value: Any, field_name: str) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string, got {value!r}")
+
+
+def _require_currency(value: Any, field_name: str = "currency") -> None:
+    if not isinstance(value, str) or not _CURRENCY_RE.match(value):
+        raise ValueError(
+            f"{field_name} must be a 3-letter ISO 4217 code (e.g. 'USD'), got {value!r}"
+        )
+
+
+def _require_positive_number(value: Any, field_name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field_name} must be a number, got {value!r}")
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{field_name} must be a positive finite number, got {value!r}")
 
 
 class DecisionStatus(str, Enum):
@@ -74,6 +98,13 @@ class Mandate:
     expires_at_ms: Optional[int] = None
     mandate_id: str = field(default_factory=lambda: _new_id("mnd"))
 
+    def __post_init__(self) -> None:
+        _require_non_empty(self.principal_id, "Mandate.principal_id")
+        _require_non_empty(self.agent_id, "Mandate.agent_id")
+        _require_currency(self.currency, "Mandate.currency")
+        if self.max_amount is not None:
+            _require_positive_number(self.max_amount, "Mandate.max_amount")
+
 
 @dataclass
 class PaymentRequest:
@@ -90,6 +121,14 @@ class PaymentRequest:
     metadata: dict[str, Any] = field(default_factory=dict)
     request_id: str = field(default_factory=lambda: _new_id("pay"))
     created_at_ms: int = field(default_factory=_now_ms)
+
+    def __post_init__(self) -> None:
+        _require_non_empty(self.agent_id, "PaymentRequest.agent_id")
+        _require_non_empty(self.principal_id, "PaymentRequest.principal_id")
+        _require_non_empty(self.merchant, "PaymentRequest.merchant")
+        _require_positive_number(self.amount, "PaymentRequest.amount")
+        _require_currency(self.currency, "PaymentRequest.currency")
+        self.currency = self.currency.upper()
 
 
 @dataclass

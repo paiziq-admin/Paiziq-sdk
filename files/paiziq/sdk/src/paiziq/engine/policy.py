@@ -12,6 +12,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional, Protocol
 
+from ..models import _require_currency, _require_positive_number
+
 
 @dataclass
 class PaymentPolicy:
@@ -36,6 +38,35 @@ class PaymentPolicy:
     review_categories: set[str] = field(default_factory=set)   # e.g. {"gift_cards", "crypto"}
     allowed_currencies: set[str] = field(default_factory=lambda: {"USD"})
     max_tx_per_hour: Optional[int] = None  # velocity guard
+
+    def __post_init__(self) -> None:
+        _require_positive_number(self.review_threshold, "PaymentPolicy.review_threshold")
+        _require_positive_number(self.hard_limit, "PaymentPolicy.hard_limit")
+        if self.hard_limit < self.review_threshold:
+            raise ValueError(
+                "PaymentPolicy.hard_limit must be >= review_threshold "
+                f"({self.hard_limit} < {self.review_threshold})"
+            )
+        if not 0 < self.budget_warning_ratio <= 1:
+            raise ValueError(
+                "PaymentPolicy.budget_warning_ratio must be in (0, 1], got "
+                f"{self.budget_warning_ratio!r}"
+            )
+        if self.daily_budget is not None:
+            _require_positive_number(self.daily_budget, "PaymentPolicy.daily_budget")
+        if self.monthly_budget is not None:
+            _require_positive_number(self.monthly_budget, "PaymentPolicy.monthly_budget")
+        if self.max_tx_per_hour is not None and self.max_tx_per_hour < 1:
+            raise ValueError(
+                f"PaymentPolicy.max_tx_per_hour must be >= 1, got {self.max_tx_per_hour!r}"
+            )
+        if self.treat_unknown_merchant_as not in ("needs_review", "rejected"):
+            raise ValueError(
+                "PaymentPolicy.treat_unknown_merchant_as must be 'needs_review' or "
+                f"'rejected', got {self.treat_unknown_merchant_as!r}"
+            )
+        for code in self.allowed_currencies:
+            _require_currency(code, "PaymentPolicy.allowed_currencies entry")
 
     def normalized_allowlist(self) -> Optional[set[str]]:
         if self.merchant_allowlist is None:
