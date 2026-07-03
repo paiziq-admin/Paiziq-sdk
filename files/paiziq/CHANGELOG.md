@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Decision engine service boundary (PZ-017): `POST /v1/decisions`
+  evaluates a persisted payment with the deterministic SDK
+  `DecisionEngine`, stores an immutable decision record (re-evaluation
+  appends a new one), applies the matching payment state transition,
+  and opens a review row when the verdict is `needs_review`. Plus
+  `GET /v1/decisions[?payment_id]` and `GET /v1/decisions/{id}`
+  (`stores/decisions.py`, `routers/decisions.py`). `policy_version` is
+  null until policy management (PZ-022+) lands.
 - Payment proposal persistence and state transitions (PZ-016):
   `POST /v1/payments` (tenancy-checked, `Idempotency-Key` replay
   returns the original payment), `GET /v1/payments` with

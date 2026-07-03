@@ -253,9 +253,9 @@ returned in `GET /v1/payments/{id}` as `data.transitions`.
 
 | Endpoint | Status |
 | --- | --- |
-| `POST /v1/decisions` | ⬜ (phase 3) |
-| `GET /v1/decisions/{decision_id}` | ⬜ (phase 3) |
-| `GET /v1/decisions` (filter: `payment_id`) | ⬜ (phase 3) |
+| `POST /v1/decisions` | ✅ |
+| `GET /v1/decisions/{decision_id}` | ✅ |
+| `GET /v1/decisions` (filter: `payment_id`) | ✅ |
 
 `POST /v1/decisions` evaluates a persisted payment (`{"payment_id":
 "pay_…"}`) against the environment's active policy using the deterministic
