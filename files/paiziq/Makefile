@@ -10,7 +10,7 @@ PIP         := $(PY) -m pip
 .DEFAULT_GOAL := help
 
 .PHONY: help venv install lint typecheck test coverage examples build \
-        ingest-install ingest-test ingest-run check clean
+        openapi ingest-install ingest-test ingest-run check clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -41,6 +41,9 @@ examples: ## Run the runnable examples end to end
 
 build: ## Build the sdist and wheel
 	cd $(SDK_DIR) && .venv/bin/python -m build
+
+openapi: ## Regenerate the OpenAPI spec and generated SDK client types
+	cd $(INGEST_DIR) && ../../$(VENV)/bin/python scripts/export_openapi.py
 
 ingest-install: ## Install ingest service dependencies
 	$(PIP) install -r $(INGEST_DIR)/requirements.txt

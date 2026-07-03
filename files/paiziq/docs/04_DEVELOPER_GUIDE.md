@@ -25,9 +25,18 @@ paiziq/
 │   └── examples/             # runnable end-to-end examples
 └── services/ingest/          # FastAPI trace-ingest service
     ├── app.py                # endpoints, auth, limits
+    ├── config.py             # env-driven settings, fail-fast validation
     ├── storage.py            # SQLite IngestStore (swap for RDS later)
+    ├── migrations.py         # versioned schema migration runner
+    ├── migrations/           # numbered .sql migrations (0001_, 0002_, ...)
+    ├── openapi.json          # committed OpenAPI 3.1 spec (make openapi)
+    ├── scripts/              # spec export + client-type generation
     └── tests/
 ```
+
+Schema changes ship as a new numbered file in
+`services/ingest/migrations/` — never edit an applied migration.
+Migrations run automatically when the service opens its database.
 
 ## 2. Getting started
 
@@ -46,6 +55,10 @@ commands on every push and pull request.
 
 1. Branch from `main`.
 2. Make your change. Follow the architecture invariants below.
+   If you change ingest endpoints or request/response models, run
+   `make openapi` to regenerate `services/ingest/openapi.json` and
+   `sdk/src/paiziq/api_types.py` (sync tests fail otherwise), and
+   update `docs/06_API_CONTRACT.md`.
 3. `make check` — lint, SDK tests, ingest tests, examples.
 4. Add a bullet under the `Unreleased`/next version heading in
    `CHANGELOG.md` describing the change.
@@ -95,10 +108,14 @@ commands on every push and pull request.
 make ingest-run        # uvicorn on http://127.0.0.1:8800
 ```
 
-Auth uses Bearer API keys from the `PAIZIQ_INGEST_KEYS` env var
-(comma-separated; defaults to `dev-key` for local development).
-Storage defaults to in-memory SQLite; set `PAIZIQ_INGEST_DB=/path.db`
-to persist.
+Configuration is environment-driven and validated fail-fast at startup
+(`services/ingest/config.py`; see `.env.example` for every variable).
+Auth uses Bearer API keys from `PAIZIQ_INGEST_KEYS` (comma-separated;
+defaults to `dev-key` for local development). Storage defaults to
+in-memory SQLite; set `PAIZIQ_INGEST_DB=/path.db` to persist. Setting
+`PAIZIQ_ENV=production` refuses to boot with the dev key or an
+in-memory database. A production container image is defined in
+`services/ingest/Dockerfile`.
 
 ```bash
 curl -s -X POST http://127.0.0.1:8800/v1/traces \

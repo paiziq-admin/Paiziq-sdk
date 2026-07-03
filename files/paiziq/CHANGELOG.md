@@ -8,6 +8,54 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- API key lifecycle APIs (PZ-013): `POST /v1/api-keys` (server-generated
+  `pzq_<env-kind>_…` secrets stored as SHA-256 hashes, plaintext shown
+  exactly once), `GET /v1/api-keys`, `POST /v1/api-keys/{id}/rotate`
+  (optional grace window during which the previous secret still
+  validates), and `DELETE /v1/api-keys/{id}` (soft revoke). Bearer auth
+  now resolves database-backed keys with `ingest`/`read`/`admin` scopes
+  alongside the bootstrap env-var keys (`stores/keys.py`,
+  `routers/keys.py`, migration `0003`, scope enforcement in `auth.py`).
+- Agent registration and metadata APIs (PZ-012): `POST /v1/agents`
+  (idempotent on env + name so agents can self-register at boot),
+  `GET /v1/agents[?env_id]`, `GET /v1/agents/{id}`, and
+  `PATCH /v1/agents/{id}` (name, active/disabled status, full-replace
+  metadata) with audit-log entries (`stores/agents.py`,
+  `routers/agents.py`).
+- Organization and environment management APIs (PZ-011): `POST/GET
+  /v1/orgs`, `GET /v1/orgs/{id}`, `POST/GET /v1/orgs/{id}/environments`
+  with the contract envelope, pagination meta, 404/409/422 error codes,
+  and audit-log entries on every mutation. New control-plane plumbing:
+  `envelope.py` (envelope + `ApiError` handler), `auth.py` (shared
+  Bearer auth + audit actor), `ids.py`, `audit.py` (append-only
+  writer), `deps.py`, `stores/orgs.py`, `routers/orgs.py`.
+- Versioned SQLite schema migrations for the ingest service (PZ-010):
+  stdlib-only runner (`services/ingest/migrations.py`, transactional,
+  tracked in `schema_migrations`) with `0001` baseline (spans,
+  notifications — adopts legacy DBs) and `0002` control-plane tables:
+  organizations, environments, agents, api_keys (hashed secrets),
+  payments + append-only payment_transitions, decisions, reviews,
+  policies + immutable policy_versions, and an append-only `audit_log`
+  enforced by UPDATE/DELETE-blocking triggers. `IngestStore` runs
+  pending migrations on open.
+- Production configuration for the ingest service (PZ-009):
+  `services/ingest/config.py` with fail-fast validated, immutable
+  `Settings` loaded from env (`PAIZIQ_ENV`, `PAIZIQ_INGEST_DB`,
+  `PAIZIQ_INGEST_KEYS`, request-limit and log-level overrides).
+  `PAIZIQ_ENV=production` refuses in-memory storage and the dev key.
+  Plus `.env.example` and a non-root `Dockerfile`.
+- Machine-readable OpenAPI 3.1 specification for the ingest service
+  (`services/ingest/openapi.json`) and generated stdlib-only client
+  types (`paiziq.api_types`: `SpanIn`, `TraceBatch`, `NotificationIn`,
+  …), regenerated via `make openapi` (PZ-008). Sync tests fail the gate
+  if either artifact drifts from the live app; `paiziq.api_types` is
+  re-exported from the top-level package.
+- Canonical backend API contract (`docs/06_API_CONTRACT.md`) covering
+  ingestion, decisions, payments, reviews, policies, organizations,
+  environments, agents, API keys, and audit logs — envelope format,
+  auth scopes, error codes, tenancy model, payment state machine, and
+  per-endpoint implementation status (PZ-007). Referenced from README
+  and `02_ARCHITECTURE.md` §6.
 - Developer documentation site (`docs/site/`) — static React/Babel
   single-page app implementing the "Payment Agent SDK Guide" design
   handoff (deep charcoal + amber theme). Eight pages: overview,

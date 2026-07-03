@@ -1,9 +1,11 @@
 """SQLite storage for the ingest service.
 
 Spans are upserted by span_id so redelivered batches (SDK retries) are
-idempotent. Notifications are append-only. SQLite keeps the minimum
-viable cloud footprint local-friendly; the Phase 1 production target
-swaps this module for RDS PostgreSQL behind the same functions.
+idempotent. Notifications are append-only. The schema is owned by the
+versioned migrations in migrations/ (run automatically on open); SQLite
+keeps the minimum viable cloud footprint local-friendly and the Phase 1
+production target swaps this module for RDS PostgreSQL behind the same
+functions.
 """
 
 from __future__ import annotations
@@ -13,28 +15,7 @@ import sqlite3
 import threading
 from typing import Any
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS spans (
-    span_id        TEXT PRIMARY KEY,
-    trace_id       TEXT NOT NULL,
-    name           TEXT NOT NULL,
-    parent_span_id TEXT,
-    start_ms       INTEGER,
-    end_ms         INTEGER,
-    status         TEXT,
-    payload        TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_spans_trace_id ON spans (trace_id);
-CREATE TABLE IF NOT EXISTS notifications (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    severity      TEXT NOT NULL,
-    title         TEXT NOT NULL,
-    message       TEXT,
-    request_id    TEXT,
-    risk_flags    TEXT,
-    created_at_ms INTEGER
-);
-"""
+from migrations import apply_migrations
 
 _UPSERT_SPAN = """
 INSERT INTO spans (span_id, trace_id, name, parent_span_id, start_ms, end_ms, status, payload)
@@ -51,8 +32,16 @@ class IngestStore:
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._lock = threading.Lock()
         with self._lock:
-            self._conn.executescript(_SCHEMA)
-            self._conn.commit()
+            apply_migrations(self._conn)
+
+    @property
+    def connection(self) -> sqlite3.Connection:
+        """Shared connection for control-plane stores (same DB/lock)."""
+        return self._conn
+
+    @property
+    def lock(self) -> threading.Lock:
+        return self._lock
 
     def upsert_spans(self, spans: list[dict[str, Any]]) -> int:
         rows = [

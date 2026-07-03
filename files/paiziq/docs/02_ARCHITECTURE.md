@@ -98,7 +98,7 @@ Payments are intercepted where the agent dispatches tools (decorator / LangChain
 
 ## 6. Data Contracts (wire-level, language-neutral)
 
-`POST /v1/traces` body: `{"spans": [{name, trace_id, span_id, parent_span_id, start_ms, end_ms, status, attributes, events}]}` — decision payloads ride in span events (`decision`, `four_way_audit`). Notification webhook body: `{severity, title, message, request_id, risk_flags, created_at_ms}`. Both are stable JSON so a TypeScript SDK can target the same ingest plane.
+`POST /v1/traces` body: `{"spans": [{name, trace_id, span_id, parent_span_id, start_ms, end_ms, status, attributes, events}]}` — decision payloads ride in span events (`decision`, `four_way_audit`). Notification webhook body: `{severity, title, message, request_id, risk_flags, created_at_ms}`. Both are stable JSON so a TypeScript SDK can target the same ingest plane. The full backend API contract (envelope, auth scopes, tenancy, payments/decisions/reviews/policies/audit logs, per-endpoint status) lives in `06_API_CONTRACT.md`.
 
 ## 7. Security Architecture
 

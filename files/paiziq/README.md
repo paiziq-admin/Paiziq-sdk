@@ -142,4 +142,5 @@ paiziq/
 | [Build & deploy plan](docs/03_BUILD_DEPLOY_PLAN.md) | Phased delivery plan and risks |
 | [Developer guide](docs/04_DEVELOPER_GUIDE.md) | Setup, workflow, conventions, releasing |
 | [Progress tracker](docs/05_PROGRESS_TRACKER.md) | Human-readable implementation status |
+| [API contract](docs/06_API_CONTRACT.md) | Canonical backend HTTP API contract (v1) |
 | [Changelog](CHANGELOG.md) | Per-change history with versions |

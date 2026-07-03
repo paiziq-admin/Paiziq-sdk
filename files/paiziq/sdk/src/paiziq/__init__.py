@@ -7,6 +7,7 @@ Integrations:
     paiziq.tracing.integrations (generic / LangChain / OpenAI)
 """
 
+from . import api_types
 from .audit.postgres import PostgresAuditStore
 from .engine.policy import BudgetTracker, PaymentPolicy
 from .engine.stores import RedisBudgetStore
@@ -31,6 +32,7 @@ __version__ = "0.2.0"
 
 __all__ = [
     "PaiziqSDK",
+    "api_types",
     "PaymentRequest",
     "Mandate",
     "PaymentPolicy",

@@ -62,6 +62,23 @@ Legend: ✅ done · 🔄 in progress · ⬜ not started
 (local/CI; CodeArtifact pending) · traces visible in dashboard ⬜
 (dashboard is a parallel workstream).
 
+## Backend API build-out (PZ backlog)
+
+Ordered backlog for the backend/SDK build-out. IDs come from the
+product task list; statuses update as each item starts/completes.
+
+| ID | Item | Status | Where / Notes |
+| --- | --- | --- | --- |
+| PZ-007 | API contract (ingestion, decisions, reviews, policies, agents, audit logs) | ✅ | `docs/06_API_CONTRACT.md` |
+| PZ-008 | OpenAPI specification + generated client types | ✅ | `services/ingest/openapi.json`, `paiziq.api_types`, `make openapi` |
+| PZ-009 | Backend service scaffold, production configuration | ✅ | `services/ingest/config.py`, `.env.example`, `Dockerfile` |
+| PZ-010 | Schema migrations (tenants, agents, events, payments, reviews, policies, audit logs) | ✅ | `services/ingest/migrations.py`, `migrations/000*.sql` |
+| PZ-011 | Organization & environment management APIs | ✅ | `routers/orgs.py`, `stores/orgs.py` |
+| PZ-012 | Agent registration & metadata APIs | ✅ | `routers/agents.py`, `stores/agents.py` |
+| PZ-013 | API key create/display-once/rotate/revoke | ✅ | `routers/keys.py`, `stores/keys.py`, migration `0003` |
+| PZ-016 | Payment proposal persistence + state transitions | ⬜ | |
+| PZ-017 | Decision engine service boundary | ⬜ | |
+
 ## Phase 2 — Pilot Readiness
 
 | Item | Status |
@@ -90,3 +107,10 @@ Legend: ✅ done · 🔄 in progress · ⬜ not started
 | 2026-06-09 | 0.2.0 | `make check` (lint + tests + examples) | all passed |
 | 2026-06-09 | 0.2.0 | coverage | 89% total; engine/ package 97% (gate ≥ 90%) |
 | 2026-06-10 | unreleased | docs site render check (browser, all 8 pages load; API/recipes verified) | passed |
+| 2026-07-03 | unreleased | `make check` after PZ-007/PZ-008 (69 SDK + 13 ingest tests, examples) | all passed |
+| 2026-07-03 | unreleased | mypy on SDK incl. generated `api_types` (17 files) | no issues |
+| 2026-07-03 | unreleased | `make check` after PZ-009 (69 SDK + 22 ingest tests, examples) | all passed |
+| 2026-07-03 | unreleased | `make check` after PZ-010 (69 SDK + 30 ingest tests, examples) | all passed |
+| 2026-07-03 | unreleased | `make check` after PZ-011 (69 SDK + 40 ingest tests, examples); mypy clean | all passed |
+| 2026-07-03 | unreleased | `make check` after PZ-012 (69 SDK + 49 ingest tests, examples); mypy clean | all passed |
+| 2026-07-03 | unreleased | `make check` after PZ-013 (69 SDK + 61 ingest tests, examples); mypy clean | all passed |
