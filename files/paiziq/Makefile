@@ -38,6 +38,7 @@ coverage: ## Run SDK tests with coverage report
 examples: ## Run the runnable examples end to end
 	cd $(SDK_DIR) && PYTHONPATH=src .venv/bin/python examples/happy_path.py
 	cd $(SDK_DIR) && PYTHONPATH=src .venv/bin/python examples/framework_integrations.py
+	cd $(SDK_DIR) && PYTHONPATH=src .venv/bin/python examples/payment_agent.py
 
 build: ## Build the sdist and wheel
 	cd $(SDK_DIR) && .venv/bin/python -m build

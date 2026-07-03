@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Test payment agent example (PZ-044): `sdk/examples/payment_agent.py`
+  drives approved / needs-review-with-human-approval / rejected /
+  engine-outage / webhook-verification flows entirely through
+  `PaiziqSDK` (no policy logic in the agent), exporting spans through
+  the retrying `SyncHTTPTransport` against an in-memory endpoint.
+  Wired into `make examples` (and thus `make check`).
 - SDK webhook signature verification (PZ-038): `paiziq.webhooks` with
   `verify_webhook_signature(payload, signature, secret, tolerance_s)`
   (HMAC-SHA256 over `t=...,v1=...` headers, constant-time compare,
