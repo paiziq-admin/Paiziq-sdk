@@ -22,6 +22,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol
 
+from ..transport import SyncHTTPTransport
+
 logger = logging.getLogger("paiziq.tracing")
 
 
@@ -110,6 +112,7 @@ class HTTPExporter:
         flush_interval_s: float = 2.0,
         max_retries: int = 3,
         timeout_s: float = 5.0,
+        transport: Optional[SyncHTTPTransport] = None,
     ) -> None:
         self.endpoint = endpoint.rstrip("/")
         self.api_key = api_key
@@ -117,6 +120,10 @@ class HTTPExporter:
         self.flush_interval_s = flush_interval_s
         self.max_retries = max_retries
         self.timeout_s = timeout_s
+        # Optional shared retry/backoff transport (PZ-033). Default None
+        # keeps the original inline urllib retry loop: wire contract and
+        # behavior unchanged unless a transport is explicitly injected.
+        self.transport = transport
         self._q: queue.Queue[Optional[Span]] = queue.Queue(maxsize=10_000)
         self._stop = threading.Event()
         self._worker = threading.Thread(target=self._run, name="paiziq-exporter", daemon=True)
@@ -149,6 +156,14 @@ class HTTPExporter:
             self._send(batch)
 
     def _send(self, batch: list[Span]) -> None:
+        if self.transport is not None:
+            try:
+                self.transport.post(
+                    "/v1/traces", json_body={"spans": [s.to_dict() for s in batch]}
+                )
+            except Exception as exc:  # observability never raises (incl. TransportError)
+                logger.error("paiziq export via transport gave up: %s", exc)
+            return
         body = json.dumps({"spans": [s.to_dict() for s in batch]}, default=str).encode()
         req = urllib.request.Request(
             f"{self.endpoint}/v1/traces",

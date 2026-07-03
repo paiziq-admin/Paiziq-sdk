@@ -1,7 +1,8 @@
 """HTTP transports with bounded exponential backoff (stdlib only).
 
 `AsyncHTTPTransport` (PZ-032) runs blocking `urllib` calls in an
-executor so agents on asyncio never block their event loop. Both
+executor so agents on asyncio never block their event loop;
+`SyncHTTPTransport` (PZ-033) is its blocking twin. Both
 transports share one `RetryPolicy`: retry on 429/5xx responses and
 connection errors, back off exponentially with jitter, and raise
 `TransportError` only after the policy is exhausted. Non-retryable
@@ -18,6 +19,7 @@ import asyncio
 import json as _json
 import logging
 import random
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -184,3 +186,63 @@ class AsyncHTTPTransport(_BaseTransport):
 
     async def post(self, path: str, json_body: Optional[Any] = None, **kw: Any) -> TransportResponse:
         return await self.request("POST", path, json_body=json_body, **kw)
+
+
+class SyncHTTPTransport(_BaseTransport):
+    """Blocking transport sharing the same `RetryPolicy` (PZ-033)."""
+
+    def __init__(
+        self,
+        base_url: str,
+        api_key: Optional[str] = None,
+        timeout_s: float = 10.0,
+        retry: Optional[RetryPolicy] = None,
+        opener: Callable[..., Any] = urllib.request.urlopen,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        super().__init__(base_url, api_key, timeout_s, retry, opener)
+        self._sleep = sleep
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        json_body: Optional[Any] = None,
+        headers: Optional[dict[str, str]] = None,
+    ) -> TransportResponse:
+        url = self._url(path)
+        body = self._encode(json_body)
+        all_headers = self._headers(headers)
+        last_error: Optional[str] = None
+        last_status: Optional[int] = None
+
+        for attempt in range(1, self.retry.max_attempts + 1):
+            try:
+                response = _attempt_request(
+                    url, method, body, all_headers, self.timeout_s, self._opener
+                )
+            except (urllib.error.URLError, OSError, TimeoutError) as exc:
+                last_error, last_status = str(exc), None
+                logger.warning("paiziq transport attempt %d failed: %s", attempt, exc)
+            else:
+                if not self.retry.should_retry_status(response.status):
+                    return response
+                last_error = f"HTTP {response.status}"
+                last_status = response.status
+                logger.warning(
+                    "paiziq transport attempt %d got retryable status %d",
+                    attempt, response.status,
+                )
+            if attempt < self.retry.max_attempts:
+                self._sleep(self.retry.delay_for(attempt))
+
+        raise TransportError(
+            f"{method} {url} failed after {self.retry.max_attempts} attempts: {last_error}",
+            status=last_status,
+        )
+
+    def get(self, path: str, **kw: Any) -> TransportResponse:
+        return self.request("GET", path, **kw)
+
+    def post(self, path: str, json_body: Optional[Any] = None, **kw: Any) -> TransportResponse:
+        return self.request("POST", path, json_body=json_body, **kw)

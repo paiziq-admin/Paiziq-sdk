@@ -24,6 +24,7 @@ from .tracing.scrub import PIIScrubber, ScrubbingExporter
 from .transport import (
     AsyncHTTPTransport,
     RetryPolicy,
+    SyncHTTPTransport,
     TransportError,
     TransportResponse,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "RiskFlag",
     "ExecutionResult",
     "AsyncHTTPTransport",
+    "SyncHTTPTransport",
     "RetryPolicy",
     "TransportError",
     "TransportResponse",

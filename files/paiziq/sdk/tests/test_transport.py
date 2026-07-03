@@ -1,5 +1,6 @@
-"""Transport tests (PZ-032): retry/backoff policy behavior and the
-async HTTP transport with an injected fake opener (no real network)."""
+"""Transport tests (PZ-032/PZ-033): retry/backoff policy behavior and
+the async + sync HTTP transports with injected fake openers (no real
+network)."""
 
 from __future__ import annotations
 
@@ -10,7 +11,7 @@ import urllib.error
 
 import pytest
 
-from paiziq import AsyncHTTPTransport, RetryPolicy, TransportError
+from paiziq import AsyncHTTPTransport, RetryPolicy, SyncHTTPTransport, TransportError
 
 
 class FakeResponse:
@@ -159,3 +160,83 @@ def test_json_body_and_url_joining():
     request = opener.requests[0]
     assert request.full_url == "https://api.example.test/v1/traces"
     assert json.loads(request.data.decode()) == {"spans": []}
+
+
+# ── SyncHTTPTransport (PZ-033) ───────────────────────────────────────────────
+
+def sync_transport(opener, retry=NO_WAIT, **kw) -> SyncHTTPTransport:
+    return SyncHTTPTransport(
+        "https://api.example.test", api_key="k-123", retry=retry,
+        opener=opener, sleep=lambda s: None, **kw
+    )
+
+
+def test_sync_success_and_headers():
+    opener = FakeOpener(FakeResponse(body={"data": 2}))
+    response = sync_transport(opener).post("/v1/payments", json_body={"amount": 1})
+    assert response.status == 200
+    assert response.json() == {"data": 2}
+    assert opener.requests[0].get_header("Authorization") == "Bearer k-123"
+
+
+def test_sync_retries_then_succeeds_and_sleeps_between_attempts():
+    sleeps: list[float] = []
+    opener = FakeOpener(500, urllib.error.URLError("blip"), FakeResponse())
+    transport = SyncHTTPTransport(
+        "https://api.example.test",
+        retry=RetryPolicy(max_attempts=3, base_delay_s=1.0, jitter_ratio=0),
+        opener=opener,
+        sleep=sleeps.append,
+    )
+    assert transport.get("/health").status == 200
+    assert len(opener.requests) == 3
+    assert sleeps == [1.0, 2.0]  # exponential backoff between attempts
+
+
+def test_sync_gives_up_and_raises():
+    opener = FakeOpener(503, 503, 503)
+    with pytest.raises(TransportError) as excinfo:
+        sync_transport(opener).get("/health")
+    assert excinfo.value.status == 503
+    assert len(opener.requests) == 3
+
+
+def test_sync_non_retryable_4xx_fails_fast():
+    opener = FakeOpener(403)
+    response = sync_transport(opener).get("/v1/api-keys")
+    assert response.status == 403
+    assert len(opener.requests) == 1
+
+
+def test_http_exporter_can_use_sync_transport():
+    from paiziq.tracing.tracer import HTTPExporter, Span
+
+    opener = FakeOpener(FakeResponse())
+    transport = SyncHTTPTransport(
+        "https://api.example.test", api_key="k-123", retry=NO_WAIT,
+        opener=opener, sleep=lambda s: None,
+    )
+    exporter = HTTPExporter(
+        "https://api.example.test", api_key="k-123",
+        flush_interval_s=0.05, transport=transport,
+    )
+    exporter.export([Span(name="s", trace_id="tr")])
+    exporter.shutdown()
+    assert len(opener.requests) == 1
+    assert opener.requests[0].full_url == "https://api.example.test/v1/traces"
+
+
+def test_http_exporter_transport_failure_never_raises():
+    from paiziq.tracing.tracer import HTTPExporter, Span
+
+    opener = FakeOpener(*[urllib.error.URLError("down")] * 3)
+    transport = SyncHTTPTransport(
+        "https://api.example.test", retry=NO_WAIT, opener=opener, sleep=lambda s: None
+    )
+    exporter = HTTPExporter(
+        "https://api.example.test", api_key="k-123",
+        flush_interval_s=0.05, transport=transport,
+    )
+    exporter.export([Span(name="s", trace_id="tr")])
+    exporter.shutdown()  # must not raise despite permanent failure
+    assert len(opener.requests) == 3

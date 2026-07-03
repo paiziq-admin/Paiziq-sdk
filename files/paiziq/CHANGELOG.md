@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- SDK sync HTTP transport (PZ-033): `SyncHTTPTransport` shares the
+  same `RetryPolicy` object as the async transport (identical
+  retry/backoff semantics, injectable `sleep` for tests).
+  `HTTPExporter` accepts an optional `transport=` to route span export
+  through it — default behavior and the frozen wire contract are
+  unchanged, and export failures still never raise into the agent.
 - SDK async HTTP transport (PZ-032): stdlib-only `paiziq.transport`
   module with `AsyncHTTPTransport` (blocking `urllib` I/O in an
   executor, `asyncio.sleep` backoff), a shared `RetryPolicy` (bounded
