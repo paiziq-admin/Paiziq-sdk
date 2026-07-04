@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Test payment agent duplicate and gateway-error scenarios (PZ-045):
+  resubmitting an executed proposal trips the `max_tx_per_hour`
+  velocity guard (needs_review + `velocity_anomaly` flag), and a flaky
+  gateway shows a failed charge recording an error without committing
+  budget spend, then succeeding on retry.
 - SDK-to-backend integration tests (PZ-043):
   `services/ingest/tests/test_sdk_integration.py` boots uvicorn on an
   ephemeral localhost port and drives the real service with the real

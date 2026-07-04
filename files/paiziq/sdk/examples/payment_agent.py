@@ -3,8 +3,10 @@
 The agent holds no policy logic of its own: verdicts, budgets, audits,
 failure handling and telemetry export are all delegated to the SDK.
 Runs fully offline: the span exporter ships batches through the retrying
-`SyncHTTPTransport` (PZ-033) against an in-memory HTTP endpoint, and an
-engine outage demonstrates the safe failure modes (PZ-035).
+`SyncHTTPTransport` (PZ-033) against an in-memory HTTP endpoint; an
+engine outage demonstrates the safe failure modes (PZ-035); duplicate
+submissions trip the velocity guard and a flaky gateway shows failed
+executions committing no spend (PZ-045).
 
     python examples/payment_agent.py
 """
@@ -135,7 +137,56 @@ assert decision.status.value == "needs_review"
 assert decision.reasons[0] == "failure_mode:review_required"
 sdk.engine = healthy_engine
 
-# 5. Inbound webhook from Paiziq → verify its signature before trusting it.
+# 5. Duplicate submission → the velocity guard flags the repeat for review.
+dup_sdk = PaiziqSDK(
+    policy=PaymentPolicy(
+        review_threshold=100.0,
+        hard_limit=1000.0,
+        known_merchants={"acme corp"},
+        max_tx_per_hour=1,  # duplicates of an executed payment get flagged
+    ),
+    service_name="test-payment-agent",
+    exporters=[],
+)
+first = propose("acme corp", 15.0, "Monthly Acme add-on")
+assert dup_sdk.execute_payment(first).executed
+duplicate = propose("acme corp", 15.0, "Monthly Acme add-on")  # same proposal again
+decision = dup_sdk.review_payment(duplicate)
+print(f"[duplicate] verdict={decision.status.value} flags={[f.value for f in decision.risk_flags]}")
+assert decision.status.value == "needs_review"
+assert "velocity_anomaly" in [f.value for f in decision.risk_flags]
+
+# 6. Gateway outage → execution fails safely (no spend committed), retry succeeds.
+class FlakyGateway:
+    name = "flaky-mock"
+
+    def __init__(self) -> None:
+        self.charges: list[PaymentRequest] = []
+        self._failed_once = False
+
+    def charge(self, request: PaymentRequest) -> str:
+        if not self._failed_once:
+            self._failed_once = True
+            raise RuntimeError("card network timeout")
+        self.charges.append(request)
+        return f"flaky_{request.request_id[:8]}"
+
+
+healthy_gateway, sdk.gateway = sdk.gateway, FlakyGateway()
+request = propose("acme corp", 25.0, "Payment during gateway outage")
+spent_before = sdk.budget_tracker.daily_spend(request.agent_id)
+failed = sdk.execute_payment(request)
+assert not failed.executed and "card network timeout" in (failed.error or "")
+assert sdk.budget_tracker.daily_spend(request.agent_id) == spent_before  # nothing committed
+retried = sdk.execute_payment(request)
+print(
+    f"[gateway]   first_error={failed.error!r} retried={retried.executed} "
+    f"ref={retried.gateway_reference}"
+)
+assert retried.executed
+sdk.gateway = healthy_gateway
+
+# 7. Inbound webhook from Paiziq → verify its signature before trusting it.
 secret = "whsec_" + "demo" * 8
 payload = json.dumps({"event": "payment.approved", "request_id": request.request_id})
 signature = sign_webhook_payload(payload, secret)
@@ -143,7 +194,7 @@ print(f"[webhook]   valid={verify_webhook_signature(payload, signature, secret)}
 assert verify_webhook_signature(payload, signature, secret)
 assert not verify_webhook_signature(payload + " ", signature, secret)
 
-# 6. Shut down: spans flush through the retrying transport.
+# 8. Shut down: spans flush through the retrying transport.
 sdk.shutdown()
 spans = sum(len(batch["spans"]) for batch in dashboard.batches)
 print(f"[telemetry] exported {spans} spans in {len(dashboard.batches)} batch(es) after 1 retry")
