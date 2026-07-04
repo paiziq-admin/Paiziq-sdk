@@ -157,6 +157,89 @@ def test_decisions_use_active_policy_version():
     assert decision["policy_version"] == 1
 
 
+def test_rollback_publishes_new_version_copying_old_content():
+    policy = _policy(_env()["id"], STRICT_DOC)
+    _publish(policy["id"])  # v1: hard_limit 50
+    client.put(
+        f"/v1/policies/{policy['id']}/draft",
+        json={"document": {"review_threshold": 20.0, "hard_limit": 80.0}}, headers=AUTH,
+    )
+    _publish(policy["id"])  # v2: hard_limit 80
+
+    r = client.post(
+        f"/v1/policies/{policy['id']}/rollback", json={"version": 1}, headers=AUTH
+    )
+    assert r.status_code == 200, r.text
+    v3 = r.json()["data"]
+    assert v3["version"] == 3 and v3["is_active"]
+    assert v3["document"]["hard_limit"] == 50.0  # copies v1
+
+    detail = client.get(f"/v1/policies/{policy['id']}", headers=AUTH).json()["data"]
+    assert detail["active_version"] == 3
+    assert detail["draft_document"]["hard_limit"] == 50.0  # draft re-synced
+    versions = client.get(
+        f"/v1/policies/{policy['id']}/versions", headers=AUTH
+    ).json()["data"]
+    assert [v["version"] for v in versions] == [1, 2, 3]  # history intact
+
+
+def test_rollback_unknown_version_404():
+    policy = _policy(_env()["id"])
+    r = client.post(
+        f"/v1/policies/{policy['id']}/rollback", json={"version": 4}, headers=AUTH
+    )
+    assert r.status_code == 404
+
+
+def test_compare_versions_and_draft():
+    policy = _policy(_env()["id"], STRICT_DOC)
+    _publish(policy["id"])  # v1
+    client.put(
+        f"/v1/policies/{policy['id']}/draft",
+        json={"document": {"review_threshold": 10.0, "hard_limit": 80.0,
+                           "merchant_blocklist": ["darkpool"]}},
+        headers=AUTH,
+    )
+    _publish(policy["id"])  # v2
+
+    r = client.get(
+        f"/v1/policies/{policy['id']}/versions/compare?base=1&target=2", headers=AUTH
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()["data"]
+    assert (body["base"], body["target"]) == (1, 2)
+    assert body["changes"] == {
+        "hard_limit": {"base": 50.0, "target": 80.0},
+        "merchant_blocklist": {"base": [], "target": ["darkpool"]},
+    }
+
+    # draft as a reference, and identical docs → empty diff
+    r = client.get(
+        f"/v1/policies/{policy['id']}/versions/compare?base=2&target=draft", headers=AUTH
+    )
+    assert r.json()["data"]["changes"] == {}
+
+
+def test_compare_invalid_references():
+    policy = _policy(_env()["id"])
+    assert client.get(
+        f"/v1/policies/{policy['id']}/versions/compare?base=zzz&target=1", headers=AUTH
+    ).status_code == 422
+    assert client.get(
+        f"/v1/policies/{policy['id']}/versions/compare?base=1&target=2", headers=AUTH
+    ).status_code == 404  # no versions published yet
+
+
+def test_rollback_writes_audit_log():
+    policy = _policy(_env()["id"], STRICT_DOC)
+    _publish(policy["id"])
+    client.post(f"/v1/policies/{policy['id']}/rollback", json={"version": 1}, headers=AUTH)
+    rows = store.connection.execute(
+        "SELECT action FROM audit_log WHERE resource = ? ORDER BY id", (policy["id"],)
+    ).fetchall()
+    assert [r[0] for r in rows] == ["policy.create", "policy.publish", "policy.rollback"]
+
+
 def test_policy_mutations_write_audit_log():
     policy = _policy(_env()["id"])
     _publish(policy["id"])

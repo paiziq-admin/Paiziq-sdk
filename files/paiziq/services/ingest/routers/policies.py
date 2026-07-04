@@ -13,7 +13,7 @@ from audit import AuditLog
 from auth import actor_for, require_admin_key, require_read_key
 from deps import get_audit_log, get_org_store, get_policy_store
 from envelope import ApiError, list_meta, ok
-from policy_doc import DocumentError, normalize
+from policy_doc import DocumentError, diff_documents, normalize
 from stores.orgs import OrgStore
 from stores.policies import PolicyStore
 
@@ -128,6 +128,71 @@ def list_versions(
 ) -> dict[str, Any]:
     _require_policy(policies, policy_id)
     return ok(policies.versions(policy_id))
+
+
+class RollbackRequest(BaseModel):
+    version: int = Field(ge=1)
+
+
+@router.post("/v1/policies/{policy_id}/rollback")
+def rollback_policy(
+    policy_id: str,
+    body: RollbackRequest,
+    api_key: str = Depends(require_admin_key),
+    policies: PolicyStore = Depends(get_policy_store),
+    audit: AuditLog = Depends(get_audit_log),
+) -> dict[str, Any]:
+    record = _require_policy(policies, policy_id)
+    target = policies.get_version(policy_id, body.version)
+    if target is None:
+        raise ApiError(404, "not_found", f"version {body.version} not found for {policy_id}")
+    # History is never rewritten: rollback publishes a NEW version whose
+    # content copies the target, and re-syncs the draft to match it.
+    version = policies.publish(policy_id, target["document"])
+    policies.update_draft(policy_id, target["document"])
+    audit.record(
+        actor_for(api_key), "policy.rollback", policy_id,
+        {"to_version": body.version, "published_version": version["version"],
+         "env_id": record["env_id"]},
+    )
+    return ok(version)
+
+
+def _resolve_compare_ref(
+    policies: PolicyStore, record: dict[str, Any], label: str
+) -> tuple[Any, dict[str, Any]]:
+    """A compare reference is a version number or the literal 'draft'."""
+    if label == "draft":
+        if record["draft_document"] is None:
+            raise ApiError(404, "not_found", "policy has no draft document")
+        return "draft", record["draft_document"]
+    try:
+        number = int(label)
+    except ValueError:
+        raise ApiError(422, "validation_error", f"invalid version reference: {label!r}")
+    version = policies.get_version(record["id"], number)
+    if version is None:
+        raise ApiError(404, "not_found", f"version {number} not found for {record['id']}")
+    return number, version["document"]
+
+
+@router.get("/v1/policies/{policy_id}/versions/compare")
+def compare_versions(
+    policy_id: str,
+    base: str = Query(min_length=1),
+    target: str = Query(min_length=1),
+    api_key: str = Depends(require_read_key),
+    policies: PolicyStore = Depends(get_policy_store),
+) -> dict[str, Any]:
+    record = _require_policy(policies, policy_id)
+    base_ref, base_doc = _resolve_compare_ref(policies, record, base)
+    target_ref, target_doc = _resolve_compare_ref(policies, record, target)
+    return ok({
+        "policy_id": policy_id,
+        "base": base_ref,
+        "target": target_ref,
+        "changes": diff_documents(base_doc, target_doc),
+    })
 
 
 @router.get("/v1/policies/{policy_id}/versions/{version}")

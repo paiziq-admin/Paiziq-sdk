@@ -76,3 +76,15 @@ def normalize(document: Optional[dict[str, Any]]) -> dict[str, Any]:
     """Validate a document (default policy when None) and return its
     canonical form — what gets persisted and published."""
     return from_policy(to_policy(document or {}))
+
+
+def diff_documents(
+    base: dict[str, Any], target: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """Field-level diff of two canonical documents: only changed fields,
+    each as {"base": ..., "target": ...}."""
+    return {
+        name: {"base": base.get(name), "target": target.get(name)}
+        for name in DOCUMENT_FIELDS
+        if base.get(name) != target.get(name)
+    }

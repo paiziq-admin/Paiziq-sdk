@@ -302,9 +302,9 @@ webhooks once PZ-077 lands.
 | `POST /v1/policies` (create draft) | ✅ |
 | `PUT /v1/policies/{policy_id}/draft` | ✅ |
 | `POST /v1/policies/{policy_id}/publish` | ✅ |
-| `POST /v1/policies/{policy_id}/rollback` | ⬜ (phase 5) |
+| `POST /v1/policies/{policy_id}/rollback` | ✅ |
 | `GET /v1/policies/{policy_id}/versions` · `…/versions/{version}` | ✅ |
-| `GET /v1/policies/{policy_id}/versions/compare` | ⬜ (phase 5) |
+| `GET /v1/policies/{policy_id}/versions/compare` (`base`/`target`: version or `draft`) | ✅ |
 | `POST /v1/policies/simulate` | ⬜ (phase 5) |
 
 Policy document mirrors the SDK `PaymentPolicy` fields (`review_threshold`,
@@ -314,9 +314,12 @@ Policy document mirrors the SDK `PaymentPolicy` fields (`review_threshold`,
 `max_tx_per_hour`). Published
 versions are immutable snapshots with monotonically increasing
 `version`; exactly one version per environment is `active`. Rollback
-publishes a *new* version whose content copies an older one — history is
-never rewritten. `simulate` evaluates a hypothetical payment against a
-draft or published version without persisting anything.
+publishes a *new* version whose content copies an older one and re-syncs
+the draft to match — history is never rewritten. Compare takes `base`
+and `target` query refs (a version number or the literal `draft`) and
+returns only changed fields as `{field: {base, target}}`. `simulate`
+evaluates a hypothetical payment against a draft or published version
+without persisting anything.
 
 ## 11. Audit logs (PZ-074/075)
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
-__all__ = ['AgentPatch', 'AgentRegister', 'DecisionCreate', 'DraftUpdate', 'EnvironmentCreate', 'HTTPValidationError', 'KeyCreate', 'KeyRotate', 'NotificationIn', 'OrgCreate', 'PaymentCreate', 'PolicyCreate', 'SpanIn', 'TraceBatch', 'TransitionIn', 'ValidationError']
+__all__ = ['AgentPatch', 'AgentRegister', 'DecisionCreate', 'DraftUpdate', 'EnvironmentCreate', 'HTTPValidationError', 'KeyCreate', 'KeyRotate', 'NotificationIn', 'OrgCreate', 'PaymentCreate', 'PolicyCreate', 'RollbackRequest', 'SpanIn', 'TraceBatch', 'TransitionIn', 'ValidationError']
 
 
 class AgentPatch(TypedDict, total=False):
@@ -93,6 +93,10 @@ class _PolicyCreateRequired(TypedDict):
 
 class PolicyCreate(_PolicyCreateRequired, total=False):
     document: dict[str, Any] | None
+
+
+class RollbackRequest(TypedDict):
+    version: int
 
 
 class _SpanInRequired(TypedDict):

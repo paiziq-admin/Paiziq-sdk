@@ -86,7 +86,7 @@ product task list; statuses update as each item starts/completes.
 | PZ-038 | SDK webhook signature verification | ✅ | `webhooks.py` (HMAC-SHA256, replay window) |
 | PZ-044 | Test payment agent uses SDK end-to-end | ✅ | `examples/payment_agent.py`; in `make examples` |
 | PZ-022 | Policy versioning + immutable published snapshots | ✅ | `routers/policies.py`, `stores/policies.py`, `policy_doc.py` |
-| PZ-023 | Policy draft/publish/rollback/compare APIs | 🔄 | draft + publish shipped with PZ-022; rollback/compare pending |
+| PZ-023 | Policy draft/publish/rollback/compare APIs | ✅ | `routers/policies.py` (rollback, versions/compare) |
 | PZ-024 | Policy simulator API | ⬜ | |
 
 ## Phase 2 — Pilot Readiness
@@ -135,3 +135,4 @@ product task list; statuses update as each item starts/completes.
 | 2026-07-03 | unreleased | `make check` after PZ-044 (165 SDK + 80 ingest tests, 3 examples incl. payment_agent); mypy clean | all passed |
 | 2026-07-03 | unreleased | Final wrap-up gate for PZ-013–PZ-044 batch: `make check` + mypy after README/architecture/dev-guide sync | all passed |
 | 2026-07-04 | unreleased | `make check` after PZ-022 (165 SDK + 88 ingest tests, examples) | all passed |
+| 2026-07-04 | unreleased | `make check` after PZ-023 (165 SDK + 93 ingest tests, examples) | all passed |

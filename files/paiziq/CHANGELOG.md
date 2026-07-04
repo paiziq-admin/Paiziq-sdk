@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Policy rollback and version compare (PZ-023):
+  `POST /v1/policies/{id}/rollback` publishes a new version copying an
+  older document (history never rewritten, draft re-synced) and
+  `GET /v1/policies/{id}/versions/compare?base=&target=` diffs two
+  refs (version number or `draft`) returning only changed fields.
 - Policy versioning with immutable published snapshots (PZ-022):
   `POST/GET /v1/policies`, `PUT /v1/policies/{id}/draft`,
   `POST /v1/policies/{id}/publish`, and version history endpoints
