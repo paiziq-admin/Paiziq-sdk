@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
-__all__ = ['AgentPatch', 'AgentRegister', 'DecisionCreate', 'DraftUpdate', 'EnvironmentCreate', 'HTTPValidationError', 'KeyCreate', 'KeyRotate', 'NotificationIn', 'OrgCreate', 'PaymentCreate', 'PolicyCreate', 'RollbackRequest', 'SpanIn', 'TraceBatch', 'TransitionIn', 'ValidationError']
+__all__ = ['AgentPatch', 'AgentRegister', 'DecisionCreate', 'DraftUpdate', 'EnvironmentCreate', 'HTTPValidationError', 'KeyCreate', 'KeyRotate', 'NotificationIn', 'OrgCreate', 'PaymentCreate', 'PolicyCreate', 'RollbackRequest', 'SimulatePayment', 'SimulateRequest', 'SpanIn', 'TraceBatch', 'TransitionIn', 'ValidationError']
 
 
 class AgentPatch(TypedDict, total=False):
@@ -97,6 +97,30 @@ class PolicyCreate(_PolicyCreateRequired, total=False):
 
 class RollbackRequest(TypedDict):
     version: int
+
+
+class _SimulatePaymentRequired(TypedDict):
+    merchant: str
+    amount: float
+
+
+class SimulatePayment(_SimulatePaymentRequired, total=False):
+    currency: str
+    intent_description: str
+    agent_id: str
+    principal_id: str
+
+
+class _SimulateRequestRequired(TypedDict):
+    payment: SimulatePayment
+
+
+class SimulateRequest(_SimulateRequestRequired, total=False):
+    document: dict[str, Any] | None
+    policy_id: str | None
+    version: int | None
+    use_draft: bool
+    env_id: str | None
 
 
 class _SpanInRequired(TypedDict):

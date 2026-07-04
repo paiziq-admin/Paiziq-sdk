@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Policy simulator (PZ-024): `POST /v1/policies/simulate` evaluates a
+  hypothetical payment with the deterministic SDK engine against an
+  inline document, a policy draft, a specific/latest published version,
+  or an environment's active policy — nothing persists, no payment
+  state changes, read scope suffices.
 - Policy rollback and version compare (PZ-023):
   `POST /v1/policies/{id}/rollback` publishes a new version copying an
   older document (history never rewritten, draft re-synced) and

@@ -373,6 +373,113 @@
         "title": "RollbackRequest",
         "type": "object"
       },
+      "SimulatePayment": {
+        "properties": {
+          "agent_id": {
+            "default": "simulated-agent",
+            "minLength": 1,
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "amount": {
+            "exclusiveMinimum": 0.0,
+            "title": "Amount",
+            "type": "number"
+          },
+          "currency": {
+            "default": "USD",
+            "title": "Currency",
+            "type": "string"
+          },
+          "intent_description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Intent Description",
+            "type": "string"
+          },
+          "merchant": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Merchant",
+            "type": "string"
+          },
+          "principal_id": {
+            "default": "simulated-principal",
+            "minLength": 1,
+            "title": "Principal Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "merchant",
+          "amount"
+        ],
+        "title": "SimulatePayment",
+        "type": "object"
+      },
+      "SimulateRequest": {
+        "properties": {
+          "document": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document"
+          },
+          "env_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Env Id"
+          },
+          "payment": {
+            "$ref": "#/components/schemas/SimulatePayment"
+          },
+          "policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Id"
+          },
+          "use_draft": {
+            "default": false,
+            "title": "Use Draft",
+            "type": "boolean"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "payment"
+        ],
+        "title": "SimulateRequest",
+        "type": "object"
+      },
       "SpanIn": {
         "properties": {
           "attributes": {
@@ -2270,6 +2377,67 @@
           }
         },
         "summary": "Create Policy",
+        "tags": [
+          "policies"
+        ]
+      }
+    },
+    "/v1/policies/simulate": {
+      "post": {
+        "operationId": "simulate_v1_policies_simulate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Simulate V1 Policies Simulate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Simulate",
         "tags": [
           "policies"
         ]

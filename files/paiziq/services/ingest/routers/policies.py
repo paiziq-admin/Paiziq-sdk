@@ -7,13 +7,15 @@ import sqlite3
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query
+from paiziq import PaymentRequest
+from paiziq.engine import DecisionEngine
 from pydantic import BaseModel, Field
 
 from audit import AuditLog
 from auth import actor_for, require_admin_key, require_read_key
 from deps import get_audit_log, get_org_store, get_policy_store
 from envelope import ApiError, list_meta, ok
-from policy_doc import DocumentError, diff_documents, normalize
+from policy_doc import DocumentError, diff_documents, normalize, to_policy
 from stores.orgs import OrgStore
 from stores.policies import PolicyStore
 
@@ -192,6 +194,104 @@ def compare_versions(
         "base": base_ref,
         "target": target_ref,
         "changes": diff_documents(base_doc, target_doc),
+    })
+
+
+class SimulatePayment(BaseModel):
+    merchant: str = Field(min_length=1, max_length=500)
+    amount: float = Field(gt=0)
+    currency: str = "USD"
+    intent_description: str = Field(default="", max_length=2000)
+    agent_id: str = Field(default="simulated-agent", min_length=1)
+    principal_id: str = Field(default="simulated-principal", min_length=1)
+
+
+class SimulateRequest(BaseModel):
+    payment: SimulatePayment
+    document: Optional[dict[str, Any]] = None
+    policy_id: Optional[str] = None
+    version: Optional[int] = Field(default=None, ge=1)
+    use_draft: bool = False
+    env_id: Optional[str] = None
+
+
+def _resolve_sim_policy(
+    body: SimulateRequest, policies: PolicyStore
+) -> tuple[Optional[dict[str, Any]], dict[str, Any]]:
+    """Resolve which document a simulation runs against.
+
+    Precedence: inline document > policy draft > specific version >
+    policy's latest published version > environment's active version >
+    engine default. Returns (document | None, source descriptor)."""
+    if body.document is not None:
+        return body.document, {"type": "inline"}
+    if body.policy_id is not None:
+        record = _require_policy(policies, body.policy_id)
+        if body.use_draft:
+            if record["draft_document"] is None:
+                raise ApiError(404, "not_found", "policy has no draft document")
+            return record["draft_document"], {"type": "draft", "policy_id": record["id"]}
+        if body.version is not None:
+            ver = policies.get_version(record["id"], body.version)
+            if ver is None:
+                raise ApiError(
+                    404, "not_found",
+                    f"version {body.version} not found for {record['id']}",
+                )
+            return ver["document"], {
+                "type": "version", "policy_id": record["id"], "version": ver["version"],
+            }
+        if record["latest_version"] is None:
+            raise ApiError(409, "conflict", "policy has no published versions")
+        latest = policies.get_version(record["id"], record["latest_version"])
+        assert latest is not None
+        return latest["document"], {
+            "type": "version", "policy_id": record["id"], "version": latest["version"],
+        }
+    if body.env_id is not None:
+        active = policies.active_for_env(body.env_id)
+        if active is None:
+            raise ApiError(404, "not_found", f"no active policy for env: {body.env_id}")
+        return active["document"], {
+            "type": "active", "policy_id": active["policy_id"],
+            "version": active["version"],
+        }
+    return None, {"type": "default"}
+
+
+@router.post("/v1/policies/simulate")
+def simulate(
+    body: SimulateRequest,
+    api_key: str = Depends(require_read_key),
+    policies: PolicyStore = Depends(get_policy_store),
+) -> dict[str, Any]:
+    if body.use_draft and body.version is not None:
+        raise ApiError(422, "validation_error", "use_draft and version are mutually exclusive")
+    if body.use_draft and body.policy_id is None:
+        raise ApiError(422, "validation_error", "use_draft requires policy_id")
+    document, source = _resolve_sim_policy(body, policies)
+    try:
+        policy = to_policy(document) if document is not None else None
+    except DocumentError as exc:
+        raise ApiError(422, "validation_error", f"invalid policy document: {exc}")
+    try:
+        request = PaymentRequest(
+            agent_id=body.payment.agent_id,
+            principal_id=body.payment.principal_id,
+            merchant=body.payment.merchant,
+            amount=body.payment.amount,
+            currency=body.payment.currency,
+            intent_description=body.payment.intent_description,
+        )
+    except ValueError as exc:
+        raise ApiError(422, "validation_error", f"invalid payment: {exc}")
+    verdict = DecisionEngine(policy=policy).evaluate(request)
+    return ok({
+        "verdict": verdict.status.value,
+        "reasons": list(verdict.reasons),
+        "risk_flags": [f.value for f in verdict.risk_flags],
+        "policy_source": source,
+        "persisted": False,
     })
 
 

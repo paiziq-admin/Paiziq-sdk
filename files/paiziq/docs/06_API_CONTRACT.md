@@ -305,7 +305,7 @@ webhooks once PZ-077 lands.
 | `POST /v1/policies/{policy_id}/rollback` | ✅ |
 | `GET /v1/policies/{policy_id}/versions` · `…/versions/{version}` | ✅ |
 | `GET /v1/policies/{policy_id}/versions/compare` (`base`/`target`: version or `draft`) | ✅ |
-| `POST /v1/policies/simulate` | ⬜ (phase 5) |
+| `POST /v1/policies/simulate` | ✅ |
 
 Policy document mirrors the SDK `PaymentPolicy` fields (`review_threshold`,
 `hard_limit`, `merchant_allowlist`, `merchant_blocklist`, `known_merchants`,
@@ -318,8 +318,11 @@ publishes a *new* version whose content copies an older one and re-syncs
 the draft to match — history is never rewritten. Compare takes `base`
 and `target` query refs (a version number or the literal `draft`) and
 returns only changed fields as `{field: {base, target}}`. `simulate`
-evaluates a hypothetical payment against a draft or published version
-without persisting anything.
+evaluates a hypothetical payment (`{payment, document? | policy_id? +
+use_draft?/version?, env_id?}`) without persisting anything; precedence
+is inline document > draft > specific version > latest published >
+environment's active version > engine default, and the response carries
+`{verdict, reasons, risk_flags, policy_source, persisted: false}`.
 
 ## 11. Audit logs (PZ-074/075)
 

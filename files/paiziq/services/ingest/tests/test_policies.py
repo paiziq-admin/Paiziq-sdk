@@ -230,6 +230,92 @@ def test_compare_invalid_references():
     ).status_code == 404  # no versions published yet
 
 
+def _simulate(payload: dict) -> "object":
+    return client.post("/v1/policies/simulate", json=payload, headers=AUTH)
+
+
+def test_simulate_inline_document_and_default():
+    payment = {"merchant": "acme corp", "amount": 20.0}
+    r = _simulate({"payment": payment, "document": STRICT_DOC})
+    body = r.json()["data"]
+    assert r.status_code == 200, r.text
+    assert body["verdict"] == "needs_review"  # 20 > strict threshold 10
+    assert body["policy_source"] == {"type": "inline"}
+    assert body["persisted"] is False
+
+    r = _simulate({"payment": payment})  # engine default policy
+    body = r.json()["data"]
+    assert body["verdict"] == "approved"
+    assert body["policy_source"] == {"type": "default"}
+
+
+def test_simulate_draft_vs_published_version():
+    policy = _policy(_env()["id"], STRICT_DOC)
+    _publish(policy["id"])  # v1 strict
+    client.put(
+        f"/v1/policies/{policy['id']}/draft",
+        json={"document": {"review_threshold": 100.0, "hard_limit": 1000.0}},
+        headers=AUTH,
+    )
+    payment = {"merchant": "acme corp", "amount": 20.0}
+
+    draft = _simulate(
+        {"payment": payment, "policy_id": policy["id"], "use_draft": True}
+    ).json()["data"]
+    assert draft["verdict"] == "approved"
+    assert draft["policy_source"]["type"] == "draft"
+
+    v1 = _simulate(
+        {"payment": payment, "policy_id": policy["id"], "version": 1}
+    ).json()["data"]
+    assert v1["verdict"] == "needs_review"
+    assert v1["policy_source"] == {
+        "type": "version", "policy_id": policy["id"], "version": 1,
+    }
+
+    latest = _simulate({"payment": payment, "policy_id": policy["id"]}).json()["data"]
+    assert latest["policy_source"]["version"] == 1  # latest published
+
+
+def test_simulate_env_active_policy_and_rejection():
+    env = _env()
+    policy = _policy(env["id"], STRICT_DOC)
+    _publish(policy["id"])
+    r = _simulate(
+        {"payment": {"merchant": "acme corp", "amount": 500.0}, "env_id": env["id"]}
+    )
+    body = r.json()["data"]
+    assert body["verdict"] == "rejected"  # 500 > strict hard_limit 50
+    assert body["policy_source"]["type"] == "active"
+    assert body["reasons"]
+
+
+def test_simulate_never_persists():
+    before = store.connection.execute("SELECT COUNT(*) FROM decisions").fetchone()[0]
+    _simulate({"payment": {"merchant": "acme corp", "amount": 20.0}})
+    after = store.connection.execute("SELECT COUNT(*) FROM decisions").fetchone()[0]
+    assert after == before
+
+
+def test_simulate_error_cases():
+    env = _env()
+    policy = _policy(env["id"])  # nothing published
+    payment = {"merchant": "acme corp", "amount": 20.0}
+    assert _simulate({"payment": payment, "policy_id": "pol_missing"}).status_code == 404
+    assert _simulate({"payment": payment, "policy_id": policy["id"]}).status_code == 409
+    assert _simulate(
+        {"payment": payment, "policy_id": policy["id"], "version": 5}
+    ).status_code == 404
+    assert _simulate({"payment": payment, "env_id": env["id"]}).status_code == 404
+    assert _simulate(
+        {"payment": payment, "policy_id": policy["id"], "use_draft": True, "version": 1}
+    ).status_code == 422
+    assert _simulate({"payment": payment, "use_draft": True}).status_code == 422
+    assert _simulate(
+        {"payment": payment, "document": {"hard_limit": 5.0, "review_threshold": 50.0}}
+    ).status_code == 422
+
+
 def test_rollback_writes_audit_log():
     policy = _policy(_env()["id"], STRICT_DOC)
     _publish(policy["id"])
