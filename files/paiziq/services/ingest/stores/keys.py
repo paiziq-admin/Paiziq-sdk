@@ -18,7 +18,7 @@ from ids import new_id, now_ms
 
 PREFIX_LEN = 12
 _COLS = (
-    "id, env_id, name, scope, secret_prefix, created_at_ms, "
+    "id, env_id, name, scope, role, secret_prefix, created_at_ms, "
     "rotated_at_ms, revoked_at_ms, grace_until_ms"
 )
 
@@ -30,8 +30,8 @@ def _hash(secret: str) -> str:
 def _row(row: tuple) -> dict[str, Any]:
     return {
         "id": row[0], "env_id": row[1], "name": row[2], "scope": row[3],
-        "secret_prefix": row[4], "created_at_ms": row[5],
-        "rotated_at_ms": row[6], "revoked_at_ms": row[7], "grace_until_ms": row[8],
+        "role": row[4], "secret_prefix": row[5], "created_at_ms": row[6],
+        "rotated_at_ms": row[7], "revoked_at_ms": row[8], "grace_until_ms": row[9],
     }
 
 
@@ -45,17 +45,19 @@ class KeyStore:
         self._lock = lock
 
     def create(
-        self, env_id: str, env_kind: str, name: str, scope: str
+        self, env_id: str, env_kind: str, name: str, scope: str,
+        role: Optional[str] = None,
     ) -> tuple[dict[str, Any], str]:
         """Create a key; returns (record, plaintext secret — shown once)."""
         secret = _new_secret(env_kind)
         key_id = new_id("key")
         created = now_ms()
+        role_val = role or {"admin": "admin", "read": "read_only", "ingest": "developer"}.get(scope, "developer")
         with self._lock:
             self._conn.execute(
-                "INSERT INTO api_keys (id, env_id, name, scope, secret_hash, secret_prefix, "
-                "created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (key_id, env_id, name, scope, _hash(secret), secret[:PREFIX_LEN], created),
+                "INSERT INTO api_keys (id, env_id, name, scope, role, secret_hash, secret_prefix, "
+                "created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (key_id, env_id, name, scope, role_val, _hash(secret), secret[:PREFIX_LEN], created),
             )
             self._conn.commit()
         record = self.get(key_id)

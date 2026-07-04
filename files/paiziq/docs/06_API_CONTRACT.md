@@ -347,3 +347,36 @@ transition) writes an entry.
    status column, the generated OpenAPI spec, tests, `CHANGELOG.md`, and
    the progress tracker (`05_PROGRESS_TRACKER.md`).
 3. The docs site (`docs/site/`) documents only ✅ endpoints.
+
+## 12. Webhooks (PZ-076/077/078) ✅
+
+| Endpoint | Status |
+| --- | --- |
+| `POST /v1/webhook-endpoints` | ✅ |
+| `GET /v1/webhook-endpoints` | ✅ |
+| `PATCH /v1/webhook-endpoints/{id}` | ✅ |
+| `GET /v1/webhook-deliveries` | ✅ |
+| `GET /v1/webhook-deliveries/{id}` | ✅ |
+
+Outbound events (`decision.created`, `payment.updated`, `review.assigned`,
+`review.sla_breached`) are HMAC-SHA256 signed (`Paiziq-Signature: t=...,v1=...`)
+and delivered with exponential backoff (dead-letter after 5 attempts).
+
+## 13. Metrics & search (PZ-079/080) ✅
+
+| Endpoint | Status |
+| --- | --- |
+| `GET /v1/metrics/summary` | ✅ |
+| `GET /v1/metrics/timeseries` | ✅ |
+| `GET /v1/search/events` | ✅ |
+
+## 14. Admin & audit read (PZ-074/081) ✅
+
+| Endpoint | Status |
+| --- | --- |
+| `GET /v1/audit-logs` | ✅ (admin + reviewer) |
+| `POST /v1/admin/retention/run` | ✅ (admin) |
+
+Audit log listing (§11) is now implemented. RBAC roles on API keys: `admin`,
+`developer`, `reviewer`, `read_only` (PZ-073). Rate limiting returns `429
+rate_limited` (PZ-083).

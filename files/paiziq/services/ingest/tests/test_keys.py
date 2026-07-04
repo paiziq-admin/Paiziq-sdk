@@ -72,13 +72,18 @@ def test_create_key_unknown_env_404():
     assert r.json()["error"]["code"] == "not_found"
 
 
-def test_ingest_scope_can_post_but_not_read():
+def test_ingest_scope_can_post_but_not_admin():
     env = _env()
     secret = _create_key(env["id"], scope="ingest")["secret"]
     span = {"name": "s", "trace_id": "t1", "span_id": uuid.uuid4().hex}
     ok = client.post("/v1/traces", json={"spans": [span]}, headers=_bearer(secret))
     assert ok.status_code == 200
-    denied = client.get("/v1/api-keys", headers=_bearer(secret))
+    # developer role (mapped from ingest scope) may read, but not manage keys
+    denied = client.post(
+        "/v1/api-keys",
+        json={"env_id": env["id"], "name": "nope", "scope": "read"},
+        headers=_bearer(secret),
+    )
     assert denied.status_code == 403
 
 

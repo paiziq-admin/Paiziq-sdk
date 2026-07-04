@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
-__all__ = ['AgentPatch', 'AgentRegister', 'DecisionCreate', 'DraftUpdate', 'EnvironmentCreate', 'HTTPValidationError', 'KeyCreate', 'KeyRotate', 'NotificationIn', 'OrgCreate', 'PaymentCreate', 'PolicyCreate', 'RollbackRequest', 'SimulatePayment', 'SimulateRequest', 'SpanIn', 'TraceBatch', 'TransitionIn', 'ValidationError']
+__all__ = ['AgentPatch', 'AgentRegister', 'DecisionCreate', 'DraftUpdate', 'EndpointCreate', 'EndpointPatch', 'EnvironmentCreate', 'HTTPValidationError', 'KeyCreate', 'KeyRotate', 'NotificationIn', 'OrgCreate', 'PaymentCreate', 'PolicyCreate', 'RollbackRequest', 'SimulatePayment', 'SimulateRequest', 'SpanIn', 'TraceBatch', 'TransitionIn', 'ValidationError']
 
 
 class AgentPatch(TypedDict, total=False):
@@ -37,6 +37,21 @@ class DraftUpdate(TypedDict):
     document: dict[str, Any]
 
 
+class _EndpointCreateRequired(TypedDict):
+    env_id: str
+    url: str
+
+
+class EndpointCreate(_EndpointCreateRequired, total=False):
+    events: list[str]
+
+
+class EndpointPatch(TypedDict, total=False):
+    url: str | None
+    events: list[str] | None
+    status: str | None
+
+
 class EnvironmentCreate(TypedDict):
     name: str
     kind: str
@@ -46,10 +61,14 @@ class HTTPValidationError(TypedDict, total=False):
     detail: list[ValidationError]
 
 
-class KeyCreate(TypedDict):
+class _KeyCreateRequired(TypedDict):
     env_id: str
     name: str
     scope: str
+
+
+class KeyCreate(_KeyCreateRequired, total=False):
+    role: str | None
 
 
 class KeyRotate(TypedDict, total=False):

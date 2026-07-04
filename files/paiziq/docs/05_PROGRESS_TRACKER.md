@@ -91,6 +91,19 @@ product task list; statuses update as each item starts/completes.
 | PZ-043 | SDK integration tests against local backend | ✅ | `services/ingest/tests/test_sdk_integration.py` (uvicorn + real SDK) |
 | PZ-045 | Test agent scenarios: approvals/reviews/rejects/duplicates/gateway errors | ✅ | `examples/payment_agent.py` scenarios 1–8 |
 | PZ-041 | SDK package publish/release workflow | ✅ | `.github/workflows/release.yml`, `tests/test_version.py` |
+| PZ-039 | SDK dashboard deployment command | ✅ | `paiziq dashboard deploy/serve` (`cli/dashboard.py`) |
+| PZ-073 | RBAC roles on API keys | ✅ | `auth.py`, migration `0007`, `stores/keys.py` |
+| PZ-074 | Audit log read API + ingest coverage | ✅ | `audit.py`, `routers/audit.py` |
+| PZ-076 | Webhook delivery engine | ✅ | `stores/webhooks.py`, `webhook_worker.py` |
+| PZ-077 | Signed outbound webhooks | ✅ | `webhook_sign.py`, `field_secrets.py` |
+| PZ-078 | Notification routing / review SLA | ✅ | `event_router.py` |
+| PZ-079 | Metrics aggregation | ✅ | `stores/metrics.py`, `routers/metrics.py` |
+| PZ-080 | Event search indexing | ✅ | migration `0006`, `routers/search.py` |
+| PZ-081 | Data retention controls | ✅ | `retention.py`, `routers/admin.py` |
+| PZ-082 | Encryption at rest for webhook secrets | ✅ | `field_secrets.py`, `cryptography` |
+| PZ-083 | Rate limiting | ✅ | `rate_limit.py`, middleware in `app.py` |
+| PZ-084 | CORS configuration | ✅ | `config.py`, `app.py` |
+| PZ-040 | SDK CLI (init/login/agents/keys/dashboard/replay) | ✅ | `sdk/src/paiziq/cli/`, console script `paiziq` |
 
 ## Phase 2 — Pilot Readiness
 
@@ -143,3 +156,4 @@ product task list; statuses update as each item starts/completes.
 | 2026-07-04 | unreleased | `make check` after PZ-043 (165 SDK + 102 ingest tests incl. SDK-over-HTTP integration) | all passed |
 | 2026-07-04 | unreleased | `make check` after PZ-045 (payment agent scenarios 1–8 incl. duplicate + gateway error) | all passed |
 | 2026-07-04 | unreleased | `make check` after PZ-041 (167 SDK tests incl. version consistency) | all passed |
+| 2026-07-04 | unreleased | `make check` after PZ-073–084 webhook/metrics/security batch | all passed |

@@ -1,17 +1,4 @@
-"""Environment-driven configuration for the ingest service.
-
-Settings are loaded once at startup and validated fail-fast: a
-misconfigured production deployment refuses to boot rather than
-falling back to development defaults (in-memory DB, dev-key auth).
-
-Environment variables:
-    PAIZIQ_ENV                  "development" (default) or "production"
-    PAIZIQ_INGEST_DB            SQLite path (":memory:" default, dev only)
-    PAIZIQ_INGEST_KEYS          comma-separated API keys ("dev-key" default, dev only)
-    PAIZIQ_MAX_BODY_BYTES       request size limit (default 1000000)
-    PAIZIQ_MAX_SPANS_PER_BATCH  spans per batch limit (default 500)
-    PAIZIQ_LOG_LEVEL            logging level name (default "INFO")
-"""
+"""Environment-driven configuration for the ingest service."""
 
 from __future__ import annotations
 
@@ -36,6 +23,14 @@ class Settings:
     max_body_bytes: int = 1_000_000
     max_spans_per_batch: int = 500
     log_level: str = "INFO"
+    rate_limit_rpm: int = 600
+    cors_origins: frozenset[str] = field(default_factory=frozenset)
+    secrets_key: Optional[str] = None
+    review_sla_ms: int = 86_400_000
+    retention_spans_days: Optional[int] = None
+    retention_notifications_days: Optional[int] = None
+    retention_audit_days: Optional[int] = None
+    worker_interval_s: float = 1.0
 
     @property
     def is_production(self) -> bool:
@@ -55,9 +50,24 @@ def _parse_int(env: Mapping[str, str], name: str, default: int) -> int:
     return value
 
 
+def _parse_optional_int(env: Mapping[str, str], name: str) -> Optional[int]:
+    raw = env.get(name)
+    if raw is None or not raw.strip():
+        return None
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ConfigError(f"{name} must be an integer, got {raw!r}") from exc
+
+
 def _parse_keys(env: Mapping[str, str]) -> frozenset[str]:
     raw = env.get("PAIZIQ_INGEST_KEYS", DEV_KEY)
     return frozenset(k.strip() for k in raw.split(",") if k.strip())
+
+
+def _parse_origins(env: Mapping[str, str]) -> frozenset[str]:
+    raw = env.get("PAIZIQ_CORS_ORIGINS", "")
+    return frozenset(o.strip() for o in raw.split(",") if o.strip())
 
 
 def _validate_production(settings: Settings) -> None:
@@ -73,10 +83,8 @@ def _validate_production(settings: Settings) -> None:
 
 
 def load_settings(env: Optional[Mapping[str, str]] = None) -> Settings:
-    """Build validated Settings from an environment mapping (os.environ default)."""
     if env is None:
         import os
-
         env = os.environ
     environment = env.get("PAIZIQ_ENV", "development").strip().lower()
     if environment not in _ENVIRONMENTS:
@@ -84,6 +92,7 @@ def load_settings(env: Optional[Mapping[str, str]] = None) -> Settings:
     log_level = env.get("PAIZIQ_LOG_LEVEL", "INFO").strip().upper()
     if not isinstance(logging.getLevelName(log_level), int):
         raise ConfigError(f"PAIZIQ_LOG_LEVEL is not a valid logging level: {log_level!r}")
+    default_rpm = 120 if environment == "production" else 600
     settings = Settings(
         environment=environment,
         database_path=env.get("PAIZIQ_INGEST_DB", ":memory:").strip() or ":memory:",
@@ -91,6 +100,14 @@ def load_settings(env: Optional[Mapping[str, str]] = None) -> Settings:
         max_body_bytes=_parse_int(env, "PAIZIQ_MAX_BODY_BYTES", 1_000_000),
         max_spans_per_batch=_parse_int(env, "PAIZIQ_MAX_SPANS_PER_BATCH", 500),
         log_level=log_level,
+        rate_limit_rpm=_parse_int(env, "PAIZIQ_RATE_LIMIT_RPM", default_rpm),
+        cors_origins=_parse_origins(env),
+        secrets_key=(env.get("PAIZIQ_SECRETS_KEY") or None),
+        review_sla_ms=_parse_int(env, "PAIZIQ_REVIEW_SLA_MS", 86_400_000),
+        retention_spans_days=_parse_optional_int(env, "PAIZIQ_RETENTION_SPANS_DAYS"),
+        retention_notifications_days=_parse_optional_int(env, "PAIZIQ_RETENTION_NOTIFICATIONS_DAYS"),
+        retention_audit_days=_parse_optional_int(env, "PAIZIQ_RETENTION_AUDIT_DAYS"),
+        worker_interval_s=float(env.get("PAIZIQ_WORKER_INTERVAL_S", "1.0") or "1.0"),
     )
     if settings.is_production:
         _validate_production(settings)
@@ -98,7 +115,6 @@ def load_settings(env: Optional[Mapping[str, str]] = None) -> Settings:
 
 
 def configure_logging(settings: Settings) -> None:
-    """Structured-ish stdlib logging; safe to call more than once."""
     logging.basicConfig(
         level=settings.log_level,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",

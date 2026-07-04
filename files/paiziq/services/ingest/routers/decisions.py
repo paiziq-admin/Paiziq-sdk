@@ -18,16 +18,18 @@ from paiziq.engine import DecisionEngine
 from pydantic import BaseModel, Field
 
 from audit import AuditLog
-from auth import actor_for, require_ingest_key, require_read_key
+from auth import actor_for, require_ingest_key, require_read_key, settings
 from deps import (
     get_audit_log,
     get_decision_store,
+    get_event_router,
     get_payment_store,
     get_policy_store,
     get_review_store,
 )
 from envelope import ApiError, list_meta, ok
 from policy_doc import to_policy
+from event_router import EventRouter
 from stores.decisions import DecisionStore, ReviewStore
 from stores.payments import PaymentStore
 from stores.policies import PolicyStore
@@ -56,6 +58,7 @@ def create_decision(
     decisions: DecisionStore = Depends(get_decision_store),
     reviews: ReviewStore = Depends(get_review_store),
     policies: PolicyStore = Depends(get_policy_store),
+    router_events: EventRouter = Depends(get_event_router),
     audit: AuditLog = Depends(get_audit_log),
 ) -> dict[str, Any]:
     payment = payments.get(body.payment_id)
@@ -95,7 +98,19 @@ def create_decision(
         )
     review: Optional[dict[str, Any]] = None
     if verdict.status.value == "needs_review":
-        review = reviews.open(payment["id"], record["id"])
+        review = reviews.open(payment["id"], record["id"], settings.review_sla_ms)
+
+    router_events.dispatch(
+        payment["env_id"], "decision.created",
+        {"decision_id": record["id"], "payment_id": payment["id"],
+         "verdict": record["verdict"], "policy_version": policy_version},
+    )
+    if verdict.status.value == "needs_review":
+        router_events.dispatch(
+            payment["env_id"], "review.assigned",
+            {"review_id": review["id"] if review else None, "payment_id": payment["id"],
+             "decision_id": record["id"]},
+        )
 
     audit.record(
         actor, "decision.create", record["id"],

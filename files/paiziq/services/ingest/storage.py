@@ -54,6 +54,18 @@ class IngestStore:
         ]
         with self._lock:
             self._conn.executemany(_UPSERT_SPAN, rows)
+            for s in spans:
+                for event in s.get("events", []):
+                    self._conn.execute(
+                        "INSERT INTO span_events (trace_id, span_id, name, kind, payload_json, at_ms) "
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        (
+                            s["trace_id"], s["span_id"], event.get("name", "event"),
+                            event.get("kind", "event"),
+                            json.dumps(event.get("attributes", {})),
+                            event.get("ts_ms") or s.get("start_ms"),
+                        ),
+                    )
             self._conn.commit()
         return len(rows)
 

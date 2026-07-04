@@ -128,7 +128,31 @@ curl -s -X POST http://127.0.0.1:8800/v1/traces \
   -d '{"spans": [{"name": "paiziq.review_payment", "trace_id": "tr1", "span_id": "s1"}]}'
 ```
 
-## 8. Releasing
+## 8. The paiziq CLI
+
+The SDK ships a stdlib-only CLI (`paiziq`, installed with the package;
+see `sdk/src/paiziq/cli/`). Configuration lives in
+`~/.paiziq/config.json` (override with `PAIZIQ_CONFIG_DIR`); the file
+is chmod 0600 because it stores the API key.
+
+```bash
+paiziq init --endpoint http://127.0.0.1:8800   # write config
+paiziq login --api-key <key>                   # verify + store the key
+paiziq agents list                             # registry reads
+paiziq agents register --name my-agent --env <env_id>
+paiziq keys create --name ci --scope ingest --env <env_id>  # secret shown once
+paiziq keys rotate <key_id> --grace-seconds 300
+paiziq keys revoke <key_id>
+paiziq dashboard deploy --dir paiziq-dashboard # static local dashboard
+paiziq dashboard serve --port 8900             # serves + proxies /api/*
+paiziq replay <trace_id>                       # pretty-print a span tree
+```
+
+`dashboard serve` proxies API reads server-side so the key never
+reaches the browser; the hosted dashboard remains a separate
+workstream.
+
+## 9. Releasing
 
 1. Bump the version in `sdk/pyproject.toml` and `paiziq/__init__.py`
    (they must match — `tests/test_version.py` enforces it).
@@ -140,3 +164,13 @@ curl -s -X POST http://127.0.0.1:8800/v1/traces \
    them to a GitHub release, and publishes to PyPI when the
    `PYPI_API_TOKEN` repository secret is configured (the publish step
    skips cleanly when it is not).
+
+### Ingest security env vars (PZ-073–084)
+
+| Variable | Purpose |
+| --- | --- |
+| `PAIZIQ_RATE_LIMIT_RPM` | Requests/minute per API key (default 600 dev, 120 prod) |
+| `PAIZIQ_CORS_ORIGINS` | Comma-separated allowed origins (empty = disabled) |
+| `PAIZIQ_SECRETS_KEY` | Master key for Fernet encryption of webhook secrets |
+| `PAIZIQ_REVIEW_SLA_MS` | Open-review SLA deadline (default 24h) |
+| `PAIZIQ_RETENTION_*_DAYS` | Optional span/notification/audit retention |

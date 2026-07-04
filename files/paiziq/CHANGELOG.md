@@ -8,6 +8,27 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+
+- Webhook delivery engine with signed outbound payloads, retry/DLQ queue,
+  delivery logs, and event routing for decisions, payments, and review SLA
+  breaches (PZ-076/PZ-077/PZ-078): `stores/webhooks.py`, `webhook_worker.py`,
+  `event_router.py`, `routers/webhooks.py`.
+- Dashboard metrics and event search APIs (PZ-079/PZ-080):
+  `GET /v1/metrics/summary`, `GET /v1/metrics/timeseries`,
+  `GET /v1/search/events`, span-event FTS indexing on trace ingest.
+- Security hardening (PZ-073/074/081/082/083/084): RBAC roles on API keys
+  (`admin`/`developer`/`reviewer`/`read_only`), `GET /v1/audit-logs`,
+  token-bucket rate limiting (`429 rate_limited`), optional CORS origins,
+  retention purge job (`POST /v1/admin/retention/run`), Fernet encryption for
+  webhook secrets via `PAIZIQ_SECRETS_KEY` (`field_secrets.py`).
+- CLI tests for `keys list`, `--json`, and dashboard serve proxy (PZ-039/040).
+- `paiziq` CLI (PZ-039/PZ-040): stdlib-only console script
+  (`paiziq.cli`) with `init`, `login` (verifies the key before
+  saving; config chmod 0600), `agents list/register`, `keys
+  list/create/rotate/revoke` (secrets shown once), `replay` (span-tree
+  pretty-printer), and `dashboard deploy/serve` — a local static
+  dashboard whose server proxies `/api/*` reads so the API key never
+  reaches the browser (PZ-039).
 - Tag-driven SDK release workflow (PZ-041):
   `.github/workflows/release.yml` verifies the `v*` tag matches
   `pyproject.toml` and `paiziq.__version__`, runs the suite, builds
@@ -186,6 +207,20 @@ Phase 1 hardening: production stores, PII scrubbing, ingest service,
 automation, and developer documentation.
 
 ### Added
+
+- Webhook delivery engine with signed outbound payloads, retry/DLQ queue,
+  delivery logs, and event routing for decisions, payments, and review SLA
+  breaches (PZ-076/PZ-077/PZ-078): `stores/webhooks.py`, `webhook_worker.py`,
+  `event_router.py`, `routers/webhooks.py`.
+- Dashboard metrics and event search APIs (PZ-079/PZ-080):
+  `GET /v1/metrics/summary`, `GET /v1/metrics/timeseries`,
+  `GET /v1/search/events`, span-event FTS indexing on trace ingest.
+- Security hardening (PZ-073/074/081/082/083/084): RBAC roles on API keys
+  (`admin`/`developer`/`reviewer`/`read_only`), `GET /v1/audit-logs`,
+  token-bucket rate limiting (`429 rate_limited`), optional CORS origins,
+  retention purge job (`POST /v1/admin/retention/run`), Fernet encryption for
+  webhook secrets via `PAIZIQ_SECRETS_KEY` (`field_secrets.py`).
+- CLI tests for `keys list`, `--json`, and dashboard serve proxy (PZ-039/040).
 - `RedisBudgetStore` (`paiziq.engine.stores`) — shared, atomic spend
   ledger over Redis sorted sets for multi-process agent fleets.
   Accepts an injected client or a URL (lazy `redis` import, installed
@@ -220,6 +255,20 @@ automation, and developer documentation.
 Phase 0 foundation (initial release).
 
 ### Added
+
+- Webhook delivery engine with signed outbound payloads, retry/DLQ queue,
+  delivery logs, and event routing for decisions, payments, and review SLA
+  breaches (PZ-076/PZ-077/PZ-078): `stores/webhooks.py`, `webhook_worker.py`,
+  `event_router.py`, `routers/webhooks.py`.
+- Dashboard metrics and event search APIs (PZ-079/PZ-080):
+  `GET /v1/metrics/summary`, `GET /v1/metrics/timeseries`,
+  `GET /v1/search/events`, span-event FTS indexing on trace ingest.
+- Security hardening (PZ-073/074/081/082/083/084): RBAC roles on API keys
+  (`admin`/`developer`/`reviewer`/`read_only`), `GET /v1/audit-logs`,
+  token-bucket rate limiting (`429 rate_limited`), optional CORS origins,
+  retention purge job (`POST /v1/admin/retention/run`), Fernet encryption for
+  webhook secrets via `PAIZIQ_SECRETS_KEY` (`field_secrets.py`).
+- CLI tests for `keys list`, `--json`, and dashboard serve proxy (PZ-039/040).
 - Zero-dependency core SDK (`paiziq`): models, decision engine with
   explainable rules, 4-way audit, policy and budget tracking.
 - Tracing: `Tracer`, `Span`, `ConsoleExporter`, `InMemoryExporter`,

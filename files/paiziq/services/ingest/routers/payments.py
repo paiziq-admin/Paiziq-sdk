@@ -15,8 +15,9 @@ from pydantic import BaseModel, Field
 
 from audit import AuditLog
 from auth import actor_for, require_ingest_key, require_read_key
-from deps import get_agent_store, get_audit_log, get_org_store, get_payment_store
+from deps import get_agent_store, get_audit_log, get_event_router, get_org_store, get_payment_store
 from envelope import ApiError, list_meta, ok
+from event_router import EventRouter
 from stores.agents import AgentStore
 from stores.orgs import OrgStore
 from stores.payments import InvalidTransition, PaymentStore
@@ -111,6 +112,7 @@ def transition_payment(
     body: TransitionIn,
     api_key: str = Depends(require_ingest_key),
     payments: PaymentStore = Depends(get_payment_store),
+    router_events: EventRouter = Depends(get_event_router),
     audit: AuditLog = Depends(get_audit_log),
 ) -> dict[str, Any]:
     if payments.get(payment_id) is None:
@@ -125,5 +127,9 @@ def transition_payment(
     audit.record(
         actor_for(api_key), "payment.transition", payment_id,
         {"to": body.to, "reason": body.reason},
+    )
+    router_events.dispatch(
+        payment["env_id"], "payment.updated",
+        {"payment_id": payment_id, "state": payment["state"], "to": body.to},
     )
     return ok(payment)

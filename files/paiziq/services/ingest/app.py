@@ -1,48 +1,92 @@
-"""Paiziq trace-ingest service (minimum viable cloud, build plan Week 3).
-
-Endpoints (wire contract v1, see docs/02_ARCHITECTURE.md section 6):
-
-    GET  /health                       liveness probe
-    POST /v1/traces                    {"spans": [...]}  idempotent upsert
-    POST /v1/notifications             notification webhook body
-    GET  /v1/traces/{trace_id}         spans for one trace (dashboard/dev)
-    GET  /v1/notifications             recent notifications (dashboard/dev)
-
-Control-plane endpoints (envelope responses, docs/06_API_CONTRACT.md)
-are mounted from routers/ (organizations, environments, ...).
-
-Auth: per-customer API keys via the Authorization header
-("Bearer <key>"). Keys come from the PAIZIQ_INGEST_KEYS env var
-(comma-separated); the default "dev-key" is for local development only.
-
-Run locally:
-    pip3 install -r requirements.txt
-    uvicorn app:app --reload --port 8800
-"""
+"""Paiziq trace-ingest service."""
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
 from typing import Any, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from starlette.responses import JSONResponse
 
 import deps
-from auth import require_api_key, settings
-from envelope import install_error_handlers
-from routers import agents, decisions, keys, orgs, payments, policies
+from audit import AuditLog
+from auth import actor_for, require_api_key, settings
+from envelope import ApiError, install_error_handlers
+from rate_limit import RateLimiter
+from routers import admin, agents, audit, decisions, keys, metrics, orgs, payments, policies, search, webhooks
 from storage import IngestStore
+from webhook_worker import worker_loop
 
-app = FastAPI(title="Paiziq Ingest API", version="1.0")
+_rate_limiter = RateLimiter(settings.rate_limit_rpm)
+_worker_stop: Optional[asyncio.Event] = None
+_worker_task: Optional[asyncio.Task] = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _worker_stop, _worker_task
+    _worker_stop = asyncio.Event()
+    _worker_task = asyncio.create_task(
+        worker_loop(
+            deps.get_webhook_store(),
+            deps.get_event_router(),
+            deps.get_db_connection(),
+            deps.get_db_lock(),
+            deps.get_retention_job(),
+            settings.worker_interval_s,
+            _worker_stop,
+        )
+    )
+    yield
+    assert _worker_stop is not None
+    _worker_stop.set()
+    if _worker_task is not None:
+        await _worker_task
+
+
+app = FastAPI(title="Paiziq Ingest API", version="1.0", lifespan=lifespan)
 install_error_handlers(app)
 store = IngestStore(settings.database_path)
-deps.init_stores(store.connection, store.lock)
+deps.init_stores(store.connection, store.lock, settings)
+
+if settings.cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=sorted(settings.cors_origins),
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
+    )
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    if request.url.path == "/health":
+        return await call_next(request)
+    auth = request.headers.get("authorization", "")
+    key = auth.split(" ", 1)[1][:12] if auth.lower().startswith("bearer ") else request.client.host if request.client else "anon"
+    if not _rate_limiter.allow(key):
+        return JSONResponse(
+            status_code=429,
+            content={"success": False, "data": None,
+                     "error": {"code": "rate_limited", "message": "Too many requests"}},
+        )
+    return await call_next(request)
+
+
 app.include_router(orgs.router)
 app.include_router(agents.router)
 app.include_router(keys.router)
 app.include_router(payments.router)
 app.include_router(decisions.router)
 app.include_router(policies.router)
+app.include_router(webhooks.router)
+app.include_router(metrics.router)
+app.include_router(search.router)
+app.include_router(audit.router)
+app.include_router(admin.router)
 
 
 async def enforce_size_limit(request: Request) -> None:
@@ -83,18 +127,28 @@ def health() -> dict[str, str]:
 
 
 @app.post("/v1/traces", dependencies=[Depends(enforce_size_limit)])
-def ingest_traces(batch: TraceBatch, api_key: str = Depends(require_api_key)) -> dict[str, Any]:
+def ingest_traces(
+    batch: TraceBatch,
+    api_key: str = Depends(require_api_key),
+    audit: AuditLog = Depends(deps.get_audit_log),
+) -> dict[str, Any]:
     if len(batch.spans) > settings.max_spans_per_batch:
         raise HTTPException(status_code=413, detail="Too many spans in one batch")
     accepted = store.upsert_spans([s.model_dump() for s in batch.spans])
+    audit.record(actor_for(api_key), "trace.ingest", batch.spans[0].trace_id if batch.spans else "none",
+                 {"accepted": accepted})
     return {"accepted": accepted}
 
 
 @app.post("/v1/notifications", dependencies=[Depends(enforce_size_limit)])
 def ingest_notification(
-    notification: NotificationIn, api_key: str = Depends(require_api_key)
+    notification: NotificationIn,
+    api_key: str = Depends(require_api_key),
+    audit: AuditLog = Depends(deps.get_audit_log),
 ) -> dict[str, str]:
     store.add_notification(notification.model_dump())
+    audit.record(actor_for(api_key), "notification.ingest", notification.request_id or "none",
+                 {"severity": notification.severity, "title": notification.title})
     return {"status": "accepted"}
 
 

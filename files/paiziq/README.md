@@ -112,6 +112,19 @@ for call in response.choices[0].message.tool_calls:
 
 Blocked payments raise `PaymentBlockedError` carrying the full `Decision`, so the agent loop can surface the reasons back to the model or the user.
 
+## CLI
+
+The package installs a `paiziq` command for working with the backend:
+
+```bash
+paiziq init --endpoint http://127.0.0.1:8800
+paiziq login --api-key <key>          # verified, then stored (chmod 0600)
+paiziq agents list
+paiziq keys create --name ci --scope ingest --env <env_id>   # secret shown once
+paiziq dashboard deploy && paiziq dashboard serve            # local dashboard
+paiziq replay <trace_id>              # pretty-print a trace's span tree
+```
+
 ## Extensibility
 
 - **Custom rules**: implement the `Rule` protocol and `engine.add_rule(...)`.

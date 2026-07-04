@@ -27,6 +27,7 @@ class KeyCreate(BaseModel):
     env_id: str = Field(min_length=1)
     name: str = Field(min_length=1, max_length=200)
     scope: Literal["ingest", "read", "admin"]
+    role: Optional[Literal["admin", "developer", "reviewer", "read_only"]] = None
 
 
 class KeyRotate(BaseModel):
@@ -44,10 +45,10 @@ def create_key(
     env = orgs.get_environment(body.env_id)
     if env is None:
         raise ApiError(404, "not_found", f"environment not found: {body.env_id}")
-    record, secret = keys.create(body.env_id, env["kind"], body.name.strip(), body.scope)
+    record, secret = keys.create(body.env_id, env["kind"], body.name.strip(), body.scope, body.role)
     audit.record(
         actor_for(api_key), "api_key.create", record["id"],
-        {"env_id": body.env_id, "scope": body.scope, "prefix": record["secret_prefix"]},
+        {"env_id": body.env_id, "scope": body.scope, "role": record.get("role"), "prefix": record["secret_prefix"]},
     )
     return ok({**record, "secret": secret})
 

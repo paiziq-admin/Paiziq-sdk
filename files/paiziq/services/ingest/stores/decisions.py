@@ -16,7 +16,7 @@ from ids import new_id, now_ms
 
 _DECISION_COLS = "id, payment_id, policy_version, verdict, reasons, risk_flags, created_at_ms"
 _REVIEW_COLS = (
-    "id, payment_id, decision_id, state, reviewer_id, note, created_at_ms, resolved_at_ms"
+    "id, payment_id, decision_id, state, reviewer_id, note, created_at_ms, resolved_at_ms, sla_deadline_ms"
 )
 
 
@@ -32,7 +32,7 @@ def _review_row(row: tuple) -> dict[str, Any]:
     return {
         "id": row[0], "payment_id": row[1], "decision_id": row[2], "state": row[3],
         "reviewer_id": row[4], "note": row[5], "created_at_ms": row[6],
-        "resolved_at_ms": row[7],
+        "resolved_at_ms": row[7], "sla_deadline_ms": row[8],
     }
 
 
@@ -92,13 +92,15 @@ class ReviewStore:
         self._conn = conn
         self._lock = lock
 
-    def open(self, payment_id: str, decision_id: str) -> dict[str, Any]:
+    def open(self, payment_id: str, decision_id: str, sla_ms: int = 0) -> dict[str, Any]:
         review_id = new_id("rev")
+        created = now_ms()
+        sla_deadline = created + sla_ms if sla_ms > 0 else None
         with self._lock:
             self._conn.execute(
-                "INSERT INTO reviews (id, payment_id, decision_id, state, created_at_ms) "
-                "VALUES (?, ?, ?, 'open', ?)",
-                (review_id, payment_id, decision_id, now_ms()),
+                "INSERT INTO reviews (id, payment_id, decision_id, state, created_at_ms, sla_deadline_ms) "
+                "VALUES (?, ?, ?, 'open', ?, ?)",
+                (review_id, payment_id, decision_id, created, sla_deadline),
             )
             self._conn.commit()
         record = self.get(review_id)

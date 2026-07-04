@@ -116,3 +116,15 @@ Authentication is per-customer Bearer API keys (env `PAIZIQ_API_KEY`), transport
 ## 9. What Becomes Easier / Harder
 
 Easier: adding rules (protocol + one test file), adding frameworks (one adapter file), adding exporters (one class), and swapping stores/gateways (protocols everywhere). Harder: we own tracer code instead of reusing OTel (mitigated by its small size), and budget consistency across processes requires the Redis store. Revisit at GA: OTLP exporter bridge, SD-JWT mandate signing, and dashboard-driven review round-trip.
+
+### Security extensions (PZ-073–084)
+
+- **RBAC:** API keys carry a `role` column (`admin`, `developer`, `reviewer`,
+  `read_only`) mapped to allowed scopes in `auth.py`.
+- **Webhook engine:** `event_router.py` enqueues signed deliveries;
+  `webhook_worker.py` polls the retry queue on the FastAPI lifespan task.
+- **Secrets at rest:** webhook signing secrets are optionally Fernet-encrypted
+  via `PAIZIQ_SECRETS_KEY` (`field_secrets.py`; API key hashes remain SHA-256).
+- **Rate limiting:** in-memory token bucket per key prefix (`rate_limit.py`).
+- **Retention:** configurable purge of spans, notifications, and audit rows
+  (`retention.py`), with audit minimum 365 days when enabled.
