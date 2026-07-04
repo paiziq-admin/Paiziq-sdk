@@ -3,9 +3,9 @@
 `POST /v1/decisions` evaluates a persisted payment with the
 deterministic SDK `DecisionEngine`, records an immutable decision,
 applies the matching payment state transition, and opens a review row
-when the verdict is `needs_review`. Until policy management (PZ-022+)
-lands, evaluation uses the default `PaymentPolicy` and
-`policy_version` is null.
+when the verdict is `needs_review`. Evaluation uses the environment's
+active published policy version (PZ-022); when none is published yet,
+the default `PaymentPolicy` applies and `policy_version` is null.
 """
 
 from __future__ import annotations
@@ -23,11 +23,14 @@ from deps import (
     get_audit_log,
     get_decision_store,
     get_payment_store,
+    get_policy_store,
     get_review_store,
 )
 from envelope import ApiError, list_meta, ok
+from policy_doc import to_policy
 from stores.decisions import DecisionStore, ReviewStore
 from stores.payments import PaymentStore
+from stores.policies import PolicyStore
 
 router = APIRouter(tags=["decisions"])
 
@@ -52,6 +55,7 @@ def create_decision(
     payments: PaymentStore = Depends(get_payment_store),
     decisions: DecisionStore = Depends(get_decision_store),
     reviews: ReviewStore = Depends(get_review_store),
+    policies: PolicyStore = Depends(get_policy_store),
     audit: AuditLog = Depends(get_audit_log),
 ) -> dict[str, Any]:
     payment = payments.get(body.payment_id)
@@ -63,7 +67,9 @@ def create_decision(
             f"payment in state {payment['state']!r} cannot be evaluated",
         )
 
-    engine = DecisionEngine()
+    active = policies.active_for_env(payment["env_id"])
+    policy_version = active["version"] if active else None
+    engine = DecisionEngine(policy=to_policy(active["document"]) if active else None)
     verdict = engine.evaluate(
         PaymentRequest(
             agent_id=payment["agent_id"],
@@ -77,7 +83,7 @@ def create_decision(
     )
 
     record = decisions.create(
-        payment["id"], None, verdict.status.value,
+        payment["id"], policy_version, verdict.status.value,
         list(verdict.reasons), [f.value for f in verdict.risk_flags],
     )
 

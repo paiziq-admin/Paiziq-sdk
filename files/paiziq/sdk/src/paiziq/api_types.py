@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
-__all__ = ['AgentPatch', 'AgentRegister', 'DecisionCreate', 'EnvironmentCreate', 'HTTPValidationError', 'KeyCreate', 'KeyRotate', 'NotificationIn', 'OrgCreate', 'PaymentCreate', 'SpanIn', 'TraceBatch', 'TransitionIn', 'ValidationError']
+__all__ = ['AgentPatch', 'AgentRegister', 'DecisionCreate', 'DraftUpdate', 'EnvironmentCreate', 'HTTPValidationError', 'KeyCreate', 'KeyRotate', 'NotificationIn', 'OrgCreate', 'PaymentCreate', 'PolicyCreate', 'SpanIn', 'TraceBatch', 'TransitionIn', 'ValidationError']
 
 
 class AgentPatch(TypedDict, total=False):
@@ -31,6 +31,10 @@ class AgentRegister(_AgentRegisterRequired, total=False):
 
 class DecisionCreate(TypedDict):
     payment_id: str
+
+
+class DraftUpdate(TypedDict):
+    document: dict[str, Any]
 
 
 class EnvironmentCreate(TypedDict):
@@ -80,6 +84,15 @@ class PaymentCreate(_PaymentCreateRequired, total=False):
     currency: str
     intent_description: str
     request_id: str | None
+
+
+class _PolicyCreateRequired(TypedDict):
+    env_id: str
+    name: str
+
+
+class PolicyCreate(_PolicyCreateRequired, total=False):
+    document: dict[str, Any] | None
 
 
 class _SpanInRequired(TypedDict):

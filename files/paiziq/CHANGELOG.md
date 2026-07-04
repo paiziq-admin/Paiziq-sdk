@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Policy versioning with immutable published snapshots (PZ-022):
+  `POST/GET /v1/policies`, `PUT /v1/policies/{id}/draft`,
+  `POST /v1/policies/{id}/publish`, and version history endpoints
+  (`services/ingest/routers/policies.py`, `stores/policies.py`,
+  `policy_doc.py`). Policy documents are the JSON form of the SDK
+  `PaymentPolicy` and validated by it; published versions are
+  append-only with exactly one active version per environment.
+  `POST /v1/decisions` now evaluates with the environment's active
+  policy and records its `policy_version` (previously always null).
 - Test payment agent example (PZ-044): `sdk/examples/payment_agent.py`
   drives approved / needs-review-with-human-approval / rejected /
   engine-outage / webhook-verification flows entirely through

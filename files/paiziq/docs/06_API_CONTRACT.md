@@ -298,12 +298,13 @@ webhooks once PZ-077 lands.
 
 | Endpoint | Status |
 | --- | --- |
-| `GET /v1/policies` · `GET /v1/policies/{policy_id}` | ⬜ (phase 5) |
-| `POST /v1/policies` (create draft) | ⬜ (phase 5) |
-| `PUT /v1/policies/{policy_id}/draft` | ⬜ (phase 5) |
-| `POST /v1/policies/{policy_id}/publish` | ⬜ (phase 5) |
+| `GET /v1/policies` · `GET /v1/policies/{policy_id}` | ✅ |
+| `POST /v1/policies` (create draft) | ✅ |
+| `PUT /v1/policies/{policy_id}/draft` | ✅ |
+| `POST /v1/policies/{policy_id}/publish` | ✅ |
 | `POST /v1/policies/{policy_id}/rollback` | ⬜ (phase 5) |
-| `GET /v1/policies/{policy_id}/versions` · `…/compare` | ⬜ (phase 5) |
+| `GET /v1/policies/{policy_id}/versions` · `…/versions/{version}` | ✅ |
+| `GET /v1/policies/{policy_id}/versions/compare` | ⬜ (phase 5) |
 | `POST /v1/policies/simulate` | ⬜ (phase 5) |
 
 Policy document mirrors the SDK `PaymentPolicy` fields (`review_threshold`,

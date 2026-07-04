@@ -55,7 +55,7 @@ def test_small_amount_is_approved_and_transitions_payment():
     assert decision["verdict"] == "approved"
     assert decision["reasons"] == ["All decision rules passed"]
     assert decision["review_id"] is None
-    assert decision["policy_version"] is None  # policies land with PZ-022
+    assert decision["policy_version"] is None  # no policy published in this env
 
     detail = client.get(f"/v1/payments/{payment['id']}", headers=AUTH).json()["data"]
     assert detail["state"] == "approved"
