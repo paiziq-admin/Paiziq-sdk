@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- SDK-to-backend integration tests (PZ-043):
+  `services/ingest/tests/test_sdk_integration.py` boots uvicorn on an
+  ephemeral localhost port and drives the real service with the real
+  SDK — `HTTPExporter` trace export read back over the wire, webhook
+  notifications on needs_review, a full control-plane round trip
+  (org → env → agent → payment → decision) through
+  `SyncHTTPTransport`, and auth-failure surfacing. Offline-safe.
 - Policy simulator (PZ-024): `POST /v1/policies/simulate` evaluates a
   hypothetical payment with the deterministic SDK engine against an
   inline document, a policy draft, a specific/latest published version,

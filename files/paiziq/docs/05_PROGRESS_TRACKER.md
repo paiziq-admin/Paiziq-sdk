@@ -88,6 +88,7 @@ product task list; statuses update as each item starts/completes.
 | PZ-022 | Policy versioning + immutable published snapshots | ✅ | `routers/policies.py`, `stores/policies.py`, `policy_doc.py` |
 | PZ-023 | Policy draft/publish/rollback/compare APIs | ✅ | `routers/policies.py` (rollback, versions/compare) |
 | PZ-024 | Policy simulator API | ✅ | `routers/policies.py` (`POST /v1/policies/simulate`) |
+| PZ-043 | SDK integration tests against local backend | ✅ | `services/ingest/tests/test_sdk_integration.py` (uvicorn + real SDK) |
 
 ## Phase 2 — Pilot Readiness
 
@@ -137,3 +138,4 @@ product task list; statuses update as each item starts/completes.
 | 2026-07-04 | unreleased | `make check` after PZ-022 (165 SDK + 88 ingest tests, examples) | all passed |
 | 2026-07-04 | unreleased | `make check` after PZ-023 (165 SDK + 93 ingest tests, examples) | all passed |
 | 2026-07-04 | unreleased | `make check` after PZ-024 (165 SDK + 98 ingest tests, examples) | all passed |
+| 2026-07-04 | unreleased | `make check` after PZ-043 (165 SDK + 102 ingest tests incl. SDK-over-HTTP integration) | all passed |
