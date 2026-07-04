@@ -90,6 +90,7 @@ product task list; statuses update as each item starts/completes.
 | PZ-024 | Policy simulator API | ✅ | `routers/policies.py` (`POST /v1/policies/simulate`) |
 | PZ-043 | SDK integration tests against local backend | ✅ | `services/ingest/tests/test_sdk_integration.py` (uvicorn + real SDK) |
 | PZ-045 | Test agent scenarios: approvals/reviews/rejects/duplicates/gateway errors | ✅ | `examples/payment_agent.py` scenarios 1–8 |
+| PZ-041 | SDK package publish/release workflow | ✅ | `.github/workflows/release.yml`, `tests/test_version.py` |
 
 ## Phase 2 — Pilot Readiness
 
@@ -141,3 +142,4 @@ product task list; statuses update as each item starts/completes.
 | 2026-07-04 | unreleased | `make check` after PZ-024 (165 SDK + 98 ingest tests, examples) | all passed |
 | 2026-07-04 | unreleased | `make check` after PZ-043 (165 SDK + 102 ingest tests incl. SDK-over-HTTP integration) | all passed |
 | 2026-07-04 | unreleased | `make check` after PZ-045 (payment agent scenarios 1–8 incl. duplicate + gateway error) | all passed |
+| 2026-07-04 | unreleased | `make check` after PZ-041 (167 SDK tests incl. version consistency) | all passed |

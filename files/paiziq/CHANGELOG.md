@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Tag-driven SDK release workflow (PZ-041):
+  `.github/workflows/release.yml` verifies the `v*` tag matches
+  `pyproject.toml` and `paiziq.__version__`, runs the suite, builds
+  sdist+wheel, creates a GitHub release with artifacts, and publishes
+  to PyPI when `PYPI_API_TOKEN` is configured (skips cleanly
+  otherwise). Version consistency enforced by `tests/test_version.py`.
+
 - Test payment agent duplicate and gateway-error scenarios (PZ-045):
   resubmitting an executed proposal trips the `max_tx_per_hour`
   velocity guard (needs_review + `velocity_anomaly` flag), and a flaky
@@ -168,6 +175,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 - Project rules for collaborators and agents: `.cursor/rules/`
   (change workflow, SDK core invariants, docs rules) and the
   harness-agnostic summary `AGENTS.md`.
+
+### Fixed
+- CI ingest job now installs the SDK (routers import `paiziq` since
+  PZ-017) and the SDK examples step runs `payment_agent.py`.
 
 ## [0.2.0] - 2026-06-09
 

@@ -130,7 +130,13 @@ curl -s -X POST http://127.0.0.1:8800/v1/traces \
 
 ## 8. Releasing
 
-1. Bump the version in `sdk/pyproject.toml` and `paiziq/__init__.py`.
+1. Bump the version in `sdk/pyproject.toml` and `paiziq/__init__.py`
+   (they must match — `tests/test_version.py` enforces it).
 2. Move CHANGELOG entries under the new version heading with the date.
 3. `make check && make build` — artifacts land in `sdk/dist/`.
-4. Tag and push; CI uploads the dist artifact.
+4. Tag `v<version>` and push the tag. The release workflow
+   (`.github/workflows/release.yml`) verifies the tag matches the
+   package version, re-runs the SDK suite, builds sdist+wheel, attaches
+   them to a GitHub release, and publishes to PyPI when the
+   `PYPI_API_TOKEN` repository secret is configured (the publish step
+   skips cleanly when it is not).

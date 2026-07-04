@@ -1,0 +1,62 @@
+name: Release
+
+# Tag-driven SDK release (PZ-041): push a tag `v<version>` that matches
+# sdk/pyproject.toml. The workflow re-verifies version consistency,
+# runs the SDK suite, builds sdist+wheel, attaches them to a GitHub
+# release, and publishes to PyPI only when PYPI_API_TOKEN is configured.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify tag matches package version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PYPROJECT=$(python3 -c "import re,pathlib;print(re.search(r'^version = \"([^\"]+)\"', pathlib.Path('sdk/pyproject.toml').read_text(), re.M).group(1))")
+          PACKAGE=$(PYTHONPATH=sdk/src python3 -c "import paiziq; print(paiziq.__version__)")
+          echo "tag=$TAG pyproject=$PYPROJECT package=$PACKAGE"
+          test "$TAG" = "$PYPROJECT" && test "$TAG" = "$PACKAGE"
+
+      - name: Install SDK with dev extras
+        run: pip3 install -e "sdk[dev]"
+
+      - name: Run SDK test suite
+        run: python3 -m pytest sdk/tests -q
+
+      - name: Build sdist and wheel
+        run: |
+          pip3 install build
+          cd sdk && python3 -m build
+
+      - name: Create GitHub release with artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" sdk/dist/* \
+            --title "paiziq $GITHUB_REF_NAME" \
+            --notes "See CHANGELOG.md for this version's changes."
+
+      - name: Publish to PyPI (skipped unless PYPI_API_TOKEN is set)
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          if [ -z "$TWINE_PASSWORD" ]; then
+            echo "PYPI_API_TOKEN not configured; skipping registry publish."
+            exit 0
+          fi
+          pip3 install twine
+          twine upload sdk/dist/*
