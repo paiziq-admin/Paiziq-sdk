@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
-__all__ = ['AgentPatch', 'AgentRegister', 'DecisionCreate', 'DraftUpdate', 'EndpointCreate', 'EndpointPatch', 'EnvironmentCreate', 'HTTPValidationError', 'KeyCreate', 'KeyRotate', 'NotificationIn', 'OrgCreate', 'PaymentCreate', 'PolicyCreate', 'RollbackRequest', 'SimulatePayment', 'SimulateRequest', 'SpanIn', 'TraceBatch', 'TransitionIn', 'ValidationError']
+__all__ = ['AgentPatch', 'AgentRegister', 'DecisionCreate', 'DraftUpdate', 'EndpointCreate', 'EndpointPatch', 'EnvironmentCreate', 'HTTPValidationError', 'KeyCreate', 'KeyRotate', 'NotificationIn', 'OrgCreate', 'PaymentCreate', 'PolicyCreate', 'ReviewAction', 'ReviewAssignment', 'ReviewEscalation', 'ReviewRelease', 'RollbackRequest', 'SimulatePayment', 'SimulateRequest', 'SpanIn', 'TraceBatch', 'TransitionIn', 'ValidationError']
 
 
 class AgentPatch(TypedDict, total=False):
@@ -33,8 +33,12 @@ class DecisionCreate(TypedDict):
     payment_id: str
 
 
-class DraftUpdate(TypedDict):
+class _DraftUpdateRequired(TypedDict):
     document: dict[str, Any]
+
+
+class DraftUpdate(_DraftUpdateRequired, total=False):
+    reason: str | None
 
 
 class _EndpointCreateRequired(TypedDict):
@@ -112,6 +116,32 @@ class _PolicyCreateRequired(TypedDict):
 
 class PolicyCreate(_PolicyCreateRequired, total=False):
     document: dict[str, Any] | None
+
+
+class ReviewAction(TypedDict):
+    reviewer_id: str
+    note: str
+
+
+class ReviewAssignment(TypedDict):
+    reviewer_id: str
+
+
+class _ReviewEscalationRequired(TypedDict):
+    reviewer_id: str
+    note: str
+
+
+class ReviewEscalation(_ReviewEscalationRequired, total=False):
+    priority: str
+
+
+class _ReviewReleaseRequired(TypedDict):
+    reviewer_id: str
+
+
+class ReviewRelease(_ReviewReleaseRequired, total=False):
+    note: str | None
 
 
 class RollbackRequest(TypedDict):

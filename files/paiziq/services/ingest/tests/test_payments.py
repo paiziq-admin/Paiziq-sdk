@@ -140,8 +140,22 @@ def test_transition_unknown_payment_404():
 
 def test_list_payments_filters():
     env, agent = _agent_env()
-    p1 = _propose(env, agent)
-    p2 = _propose(env, agent)
+    p1 = _propose(
+        env,
+        agent,
+        merchant="Acme Hosting",
+        amount=125,
+        currency="usd",
+        principal_id="principal-alpha",
+    )
+    p2 = _propose(
+        env,
+        agent,
+        merchant="Beta Supplies",
+        amount=25,
+        currency="eur",
+        principal_id="principal-beta",
+    )
     _transition(p1["id"], "approved")
 
     by_state = client.get(
@@ -151,6 +165,26 @@ def test_list_payments_filters():
 
     by_agent = client.get(f"/v1/payments?agent_id={agent['id']}", headers=AUTH).json()
     assert by_agent["meta"]["total"] == 2
+
+    filtered = client.get(
+        f"/v1/payments?env_id={env['id']}&currency=USD&min_amount=100"
+        "&max_amount=200&q=hosting&sort=amount_desc",
+        headers=AUTH,
+    ).json()
+    assert [payment["id"] for payment in filtered["data"]] == [p1["id"]]
+
+    ascending = client.get(
+        f"/v1/payments?env_id={env['id']}&sort=amount_asc",
+        headers=AUTH,
+    ).json()
+    assert [payment["id"] for payment in ascending["data"]] == [p2["id"], p1["id"]]
+
+    invalid = client.get(
+        f"/v1/payments?env_id={env['id']}&min_amount=200&max_amount=100",
+        headers=AUTH,
+    )
+    assert invalid.status_code == 422
+    assert invalid.json()["error"]["code"] == "validation_error"
 
 
 def test_payment_mutations_write_audit_log():

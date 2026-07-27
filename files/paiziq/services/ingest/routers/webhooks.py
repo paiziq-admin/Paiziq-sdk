@@ -82,11 +82,24 @@ def list_deliveries(
     api_key: str = Depends(require_read_key),
     endpoint_id: Optional[str] = Query(default=None),
     state: Optional[str] = Query(default=None),
+    env_id: Optional[str] = Query(default=None),
+    event_type: Optional[str] = Query(default=None),
+    payment_id: Optional[str] = Query(default=None),
+    review_id: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     webhooks: WebhookStore = Depends(get_webhook_store),
 ) -> dict[str, Any]:
-    items, total = webhooks.list_deliveries(endpoint_id, state, limit, offset)
+    items, total = webhooks.list_deliveries(
+        endpoint_id,
+        state,
+        limit,
+        offset,
+        env_id=env_id,
+        event_type=event_type,
+        payment_id=payment_id,
+        review_id=review_id,
+    )
     return ok(items, meta=list_meta(total, limit, offset))
 
 

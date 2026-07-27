@@ -82,6 +82,7 @@ def test_failed_migration_rolls_back(tmp_path):
     with pytest.raises(MigrationError, match="0001_boom.sql"):
         apply_migrations(conn, tmp_path)
     assert applied_versions(conn) == set()
+    assert "ok" not in _tables(conn)
 
 
 def test_domain_constraints_enforced():
@@ -117,6 +118,26 @@ def test_payment_state_check_constraint():
             "state, created_at_ms, updated_at_ms) "
             "VALUES ('pay_1', 'env_1', 'agt_1', 'u1', 'm', 5.0, 'teleported', 1, 1)"
         )
+
+
+def test_review_workflow_columns_and_indexes_are_installed():
+    conn = sqlite3.connect(":memory:")
+    apply_migrations(conn)
+    columns = {
+        row[1]: row[2]
+        for row in conn.execute("PRAGMA table_info(reviews)").fetchall()
+    }
+    assert {
+        "priority": "TEXT",
+        "last_action": "TEXT",
+        "assigned_at_ms": "INTEGER",
+        "updated_at_ms": "INTEGER",
+    }.items() <= columns.items()
+    indexes = {
+        row[1]
+        for row in conn.execute("PRAGMA index_list(reviews)").fetchall()
+    }
+    assert "idx_reviews_payment_state" in indexes
 
 
 def test_audit_log_is_append_only():

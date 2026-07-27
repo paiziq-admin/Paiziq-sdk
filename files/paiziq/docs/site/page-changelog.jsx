@@ -1,11 +1,14 @@
 /* ============================================================
-   PAIZIQ DOCS — Changelog page (mirrors CHANGELOG.md)
+   PAIZIQ DOCS — Curated changelog highlights
    ============================================================ */
 const CHANGELOG = [
   {
     version: "Unreleased", date: "",
-    summary: "Developer experience: documentation site and project rules.",
+    summary: "Control-plane workflows and developer experience highlights.",
     added: [
+      ["Human-review workflow API (PZ-101)", "queue/detail/identity endpoints; key-name, tenant, and role binding; assignment and note-gated actions; open-review reuse and bypass guards; atomic payment resolution; migration 0008; audit entries; and signed review events."],
+      ["Dashboard query contracts", "server-side payment currency/amount/text/time filtering and sort with exact totals; grouped risk flags and payments.total metrics; exact payment/review webhook correlation."],
+      ["Policy draft audit reasons", "optional nonblank draft-update reasons are retained in append-only policy.draft_update audit detail."],
       ["Docs site", "static React docs site (docs/site/) implementing the Payment Agent SDK Guide design — animated audit pipeline, ⌘K palette, light/dark themes."],
       ["Project rules", "strict collaborator/agent rules in .cursor/rules/ and AGENTS.md."],
     ],
@@ -48,8 +51,9 @@ function PageChangelog() {
       <div className="eyebrow">Reference</div>
       <h1 className="page-title">Changelog</h1>
       <p className="lead">
-        Every change ships with a version. Canonical source:{" "}
-        <code>CHANGELOG.md</code> (Keep a Changelog, semantic versioning).
+        Curated release highlights are shown here. The complete canonical
+        history lives in <code>CHANGELOG.md</code> (Keep a Changelog,
+        semantic versioning).
       </p>
       {CHANGELOG.map((rel) => (
         <section key={rel.version}>

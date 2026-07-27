@@ -120,10 +120,16 @@ def test_reevaluation_appends_new_immutable_decision():
     first = _evaluate(payment["id"]).json()["data"]
     second = _evaluate(payment["id"]).json()["data"]  # needs_review is evaluable
     assert first["id"] != second["id"]
+    assert second["review_id"] == first["review_id"]
 
     listed = client.get(f"/v1/decisions?payment_id={payment['id']}", headers=AUTH).json()
     assert listed["meta"]["total"] == 2
     assert [d["id"] for d in listed["data"]] == [first["id"], second["id"]]
+    reviews = store.connection.execute(
+        "SELECT id, decision_id FROM reviews WHERE payment_id = ? AND state = 'open'",
+        (payment["id"],),
+    ).fetchall()
+    assert reviews == [(first["review_id"], second["id"])]
 
 
 def test_get_decision_roundtrip_and_404():

@@ -60,15 +60,20 @@ def apply_migrations(
     for version, path in discover_migrations(directory):
         if version in done:
             continue
+        applied_at_ms = int(time.time() * 1000)
+        name = path.name.replace("'", "''")
+        script = (
+            "BEGIN IMMEDIATE;\n"
+            f"{path.read_text()}\n"
+            "INSERT INTO schema_migrations (version, name, applied_at_ms) "
+            f"VALUES ({version}, '{name}', {applied_at_ms});\n"
+            "COMMIT;\n"
+        )
         try:
-            conn.executescript(path.read_text())
-            conn.execute(
-                "INSERT INTO schema_migrations (version, name, applied_at_ms) VALUES (?, ?, ?)",
-                (version, path.name, int(time.time() * 1000)),
-            )
-            conn.commit()
+            conn.executescript(script)
         except sqlite3.Error as exc:
-            conn.rollback()
+            if conn.in_transaction:
+                conn.rollback()
             raise MigrationError(f"Migration {path.name} failed: {exc}") from exc
         applied.append(path.name)
     return applied

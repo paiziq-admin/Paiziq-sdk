@@ -1,6 +1,6 @@
 # Paiziq Agent Audit Tracer — Product Scope & Technical Acceptance Criteria
 
-**Version:** 1.0 · **Date:** June 2026 · **Scope:** Backend SDK (tracer library) only
+**Version:** 1.1 · **Date:** July 2026 · **Scope:** Shipped backend SDK/control plane plus hosted commercialization planning
 
 ---
 
@@ -24,7 +24,7 @@ It is a tracer-style library in the spirit of Langfuse/OpenTelemetry — but ins
 
 ## 4. Non-Goals (v1)
 
-- **Building the dashboard frontend** — the SDK targets the dashboard's ingest API contract; the React dashboard is a separate workstream.
+- **Building the dashboard frontend in this repository** — the shipped React dashboard is maintained as a companion workstream/repository and consumes this backend's contract.
 - **Real payment-gateway certification** — v1 ships a gateway abstraction with a mock/sandbox implementation; Stripe/Mastercard Agent Pay connectors are fast-follows.
 - **LLM-as-judge semantic intent analysis in the SDK** — the SDK runs fast deterministic/heuristic checks locally; deep semantic judging happens server-side (Langfuse-style pipeline) where latency is acceptable.
 - **Cryptographic SD-JWT intent tokens** — the `Mandate` model is designed to carry SD-JWT claims later, but signing/verification is deferred to v2 to keep v1 dependency-free.
@@ -103,7 +103,7 @@ Three integration styles funneling into one SDK: a generic decorator for any fra
 
 ## 8. Open Questions
 
-- **(Product/Security)** Should `needs_review` approvals flow back from the dashboard via webhook/polling in v1, or remain SDK-local (`approve_review`)? v1 ships SDK-local; dashboard round-trip is designed but not built.
+- **(Product/Security)** The PZ-101 dashboard/control-plane queue and atomic payment resolution are shipped. A separate callback bridge that feeds a signed control-plane resolution back into an SDK process's local `approve_review` state remains a later integration decision.
 - **(Engineering)** Budget state in multi-process agent fleets requires the Redis `BudgetStore`; confirm pilot deployment topology.
 - **(Legal/Compliance)** Audit-record retention period and PII handling in `intent_description` for SOC 2 scope.
 
@@ -113,3 +113,236 @@ Three integration styles funneling into one SDK: a generic decorator for any fra
 - **Phase 1 (Weeks 1–3):** dashboard ingest API hardening, Redis budget store, Postgres audit store, CI/CD, packaging to a private index.
 - **Phase 2 (Weeks 4–6):** dashboard review round-trip, Stripe sandbox gateway, server-side LLM intent judge, pilot integration with first design partner.
 - **Phase 3 (Weeks 7–9):** SD-JWT mandate signing, Mastercard Agent Pay sandbox, TypeScript SDK kickoff.
+
+## 10. Hosted Account and Subscription Model (Planning Baseline)
+
+**Status:** Draft for product, finance, legal, support, and engineering
+approval. This section is the commercial planning source of truth; it is
+not a claim that account, OAuth, billing, or entitlement functionality is
+already implemented. Values must not be copied to customer-facing pricing
+until the approval gates in section 10.6 are complete.
+
+### 10.1 Customer, account, and billing unit
+
+- A person must sign in and have a Paiziq user account to use the hosted
+  dashboard or control plane. Public pricing, legal, status, documentation,
+  and authentication entry/callback pages remain public.
+- The **paying customer is an organization**. An individual receives a
+  one-member organization, so individual and team accounts use the same
+  tenancy, entitlement, and billing paths.
+- One billing account and one current subscription belong to one
+  organization for the initial release. Enterprise account hierarchies may
+  group organizations later, but are not an initial-release promise.
+- Human users access an organization through membership and roles. SDKs,
+  agents, CI, and automation continue to use environment-bound API keys.
+  Human roles, API-key permissions, subscription entitlements, and usage
+  limits are independent checks.
+- The recommended billing unit is a **flat organization fee with included
+  members, environments, active agents, and protected-payment volume**.
+  Contracted metered overage is reserved for Business and Enterprise after
+  usage accuracy is proven.
+- A protected-payment usage unit is the first persisted decision for one
+  unique Paiziq payment ID. Retries, idempotent replays, human-review
+  actions, and re-evaluations of that same payment do not create another
+  billable unit.
+- Usage resets at the subscription billing-cycle boundary in UTC and never
+  rolls over. Calendar-month accounting is not used.
+- All organizations, including Free organizations, have an internal
+  subscription record. Free subscriptions have no payment-provider
+  customer or price requirement.
+- Plan versions and their entitlements are immutable after use. Existing
+  subscriptions remain pinned to their version until an explicit migration
+  or plan change is recorded.
+
+The local, deterministic SDK safety layer is not remotely disabled by a
+subscription state. A limit or billing failure must never turn a rejected
+or `needs_review` payment into an approval. Hosted access and capacity are
+commercially controlled; local enforcement remains fail-safe.
+
+### 10.2 Feature and entitlement catalog
+
+Boolean access and numerical limits are separate catalog entries. Existing
+API-key scopes still authorize *who may perform an action*; the following
+catalog controls *whether the organization purchased the capability*.
+Every restricted mutation must enforce both on the server.
+
+| Catalog key | Type | Product meaning | Delivery status |
+| --- | --- | --- | --- |
+| `sdk.enforcement` | baseline | Deterministic payment rules, explainable verdicts, and safe failure modes | Shipped; all plans |
+| `sdk.four_way_audit` | baseline | Identity, Intent, Policy, and Transaction verification | Shipped; all plans |
+| `sdk.integrations` | baseline | Generic, LangChain, OpenAI, exporter, and CLI integrations | Shipped; all plans |
+| `identity.oauth_login` | boolean | OAuth/OIDC login and server-managed browser session | Required foundation |
+| `identity.memberships` | boolean | Organization membership, invitations, and human roles | Required foundation |
+| `cloud.sandbox` | boolean | Hosted control-plane use in sandbox environments | Shipped capability; gating required |
+| `cloud.production` | boolean | Hosted control-plane use in production environments | Shipped capability; gating required |
+| `cloud.ingestion` | boolean | Trace and notification ingestion/readback | Shipped capability; gating required |
+| `payments.control` | boolean | Payment proposals, immutable decisions, and state history | Shipped capability; gating required |
+| `payments.trace_read` | boolean | Payment detail, trace tree, reasons, and risk flags | Shipped capability; gating required |
+| `policies.core` | boolean | Active policy enforcement and standard policy management | Shipped capability; gating required |
+| `policies.governance` | boolean | Version compare, rollback, and simulation | Shipped capability; gating required |
+| `reviews.core` | boolean | Review queue plus approve/decline with required notes | Shipped capability; gating required |
+| `reviews.collaborative` | boolean | Claim, release, reassign, request information, escalation, and SLA fields | Shipped capability; gating required |
+| `automation.webhooks` | boolean + limit | Signed endpoints, retry/DLQ, and delivery history | Shipped capability; gating required |
+| `analytics.metrics` | boolean | Operational summary and time-series metrics | Shipped capability; gating required |
+| `analytics.search` | boolean | Cross-event search | Shipped capability; gating required |
+| `governance.audit_read` | boolean | Append-only audit-log visibility | Shipped capability; gating required |
+| `governance.audit_export` | boolean | Customer export of audit records | Dashboard capability; server export contract required |
+| `governance.retention` | value | Trace/notification history window and approved custom retention | Partial; enforcement hardening required |
+| `tenant.members` | limit | Active human organization members; pending invitations do not count | Required foundation |
+| `tenant.sandbox_environments` | limit | Active sandbox environments | Meter/gate required |
+| `tenant.production_environments` | limit | Active production environments | Meter/gate required |
+| `tenant.active_agents` | limit | Agents whose status is `active` | Meter/gate required |
+| `tenant.active_api_keys` | limit | Non-revoked API keys | Meter/gate required |
+| `usage.payment_evaluations` | limit | Unique protected payments per billing cycle | Required foundation |
+| `tenant.webhook_endpoints` | limit | Enabled webhook endpoints | Meter/gate required |
+| `billing.self_service` | boolean | Checkout, plan management, invoices, cancellation, and reactivation | Required foundation |
+| `identity.enterprise_sso` | boolean | Customer-managed SAML/OIDC federation and lifecycle provisioning | Future; Enterprise must not promise it before delivery |
+| `support.level` | value | Community, standard, priority, business, or contractual support | Operational foundation |
+
+Platform security controls—tenant isolation, encryption, signature
+verification, idempotency, audit integrity, rate limiting, session
+security, and backups—are service baselines, never optional paid
+features.
+
+Numerical entitlements use these rules:
+
+| Limit | Reset | Rollover | Behavior at the limit |
+| --- | --- | --- | --- |
+| Members, environments, active agents, API keys, webhook endpoints | None | Not applicable | Reject the create/reactivate action; preserve existing resources and data |
+| Protected-payment evaluations | Billing cycle | No | Notify at 80% and 100%; allow a time-boxed recovery buffer; never produce a more permissive verdict |
+| Trace/notification history | Continuous retention window | No | Expire eligible verbose history; never rewrite append-only audit records |
+| Trial allowance | Once per billing account | No | Fall back to Free when the trial ends without a verified paid subscription |
+
+At 100% of protected-payment volume, self-service plans enter a soft
+overage buffer through the earlier of seven days or 120% usage. During
+the buffer Paiziq continues safety-critical decision/audit handling and
+prompts an upgrade. After the buffer, verbose trace ingestion and
+nonessential paid mutations may be restricted; server-dependent payment
+paths must return a structured limit failure that the SDK maps to
+`needs_review` or fail-closed behavior. Business/Enterprise automatic
+overage requires an explicit contract. No silent overage charge is
+allowed during beta.
+
+### 10.3 Draft Subscription Plan Matrix
+
+Prices are working USD planning assumptions, exclude tax, and require
+cost, market, and legal validation. Annual pricing equals ten monthly
+payments (two months free). Trace/event storage is sold as a retention
+window rather than an invented GB allowance; byte-based storage pricing
+may be added only after storage metering exists. Security audit metadata
+retains the platform minimum of at least 365 days, independent of the
+customer-visible trace window.
+
+| Plan | Free | Basic | Professional | Business | Enterprise |
+| --- | --- | --- | --- | --- | --- |
+| Intended customer | Evaluation or occasional user | Individual builder or very small team | Power user or small platform/security team | Multi-team organization | Large or regulated customer |
+| Monthly price | $0 | $49 | $249 | $999 | Custom |
+| Annual price | $0 | $490 | $2,490 | $9,990 | Annual contract |
+| Trial | None | 14 days | 14 days | 30-day assisted trial | Negotiated pilot |
+| Active members | 1 | 3 | 10 | 50 | Custom |
+| Sandbox environments | 1 | 2 | 5 | 20 | Custom |
+| Production environments | 0 | 1 | 3 | 10 | Custom |
+| Active agents | 2 | 10 | 50 | 250 | Custom |
+| Active API keys | 2 | 10 | 50 | 250 | Custom |
+| Protected payments / billing cycle | 500, sandbox only | 10,000 | 100,000 | 1,000,000 | Contracted |
+| Webhook endpoints | 1 sandbox | 2 | 10 | 50 | Custom |
+| Customer-visible trace/notification history | 7 days | 30 days | 90 days | 365 days | Custom, audit minimum respected |
+| Hosted production control plane | No | Core | Full | Full | Full/custom |
+| Policy governance and simulation | Sandbox evaluation | Core policies | Full | Full | Full/custom |
+| Human review | Sandbox evaluation | Core, up to 3 members | Collaborative | Collaborative + operational governance | Custom scale |
+| Metrics and search | Basic sandbox | Basic | Full | Full | Full/custom |
+| Audit access/export | Read in sandbox | Read | Read + export | Read + export + retention controls | Custom |
+| Enterprise federation | No | No | No | No | Planned; contract only after shipped |
+| Support | Community | Standard email, two-business-day target | Priority, one-business-day target | Business, eight-business-hour target | Contractual SLA |
+
+All paid trials use the selected plan's features and limits and are
+available once per billing account. The default proposal is no payment
+method required for Basic/Professional trials; Business/Enterprise
+trials are manually approved. Trial conversion and abuse controls must
+be measured before this policy is finalized.
+
+### 10.4 Internal subscription lifecycle
+
+Provider status is evidence, not access control. Only a verified,
+idempotently processed provider event or an authorized internal action
+may transition the internal subscription. Access decisions read the
+internal subscription and compiled entitlement revision.
+
+| Internal state | Product access | Required product/operations behavior |
+| --- | --- | --- |
+| `incomplete_signup` | Public pages and account completion only | Resume OAuth/account setup; do not create paid access |
+| `pending_payment` | Existing Free/trial access only | Show pending verification; poll internal status; never trust a redirect query parameter |
+| `trial` | Trial plan entitlements | Show exact expiration and conversion choice; notify seven, three, and one day before expiry |
+| `active` | Current plan entitlements | Normal access, metering, renewal, invoices, and usage notices |
+| `past_due` | Current entitlements for up to 48 hours | Notify immediately; request payment update; retry safely |
+| `grace_period` | Core safety and read access; restrict new members, environments, keys, and nonessential exports | Runs on days 3–7 after failure; retry and warn before suspension |
+| `suspended` | Existing data read/export where allowed; no new paid mutations; safety paths remain fail-closed/review-required | Require successful payment or approved temporary grant; do not delete data |
+| `paused` | Reserved; not offered at initial self-service launch | Requires a later approved policy before use |
+| `canceled` | Current plan through `access_until`/period end | Automatic renewal disabled; show effective end date and reactivation |
+| `expired` | Free entitlements if eligible, otherwise account/billing and retained-data access only | Offer reactivation; enforce retention/export policy |
+
+`cancel_at_period_end` and a pending plan change are scheduled attributes,
+not additional access-authority states. Invoice/payment conditions
+(`pending`, `paid`, `failed`, `refunded`, `disputed`, `uncollectible`)
+remain separate from subscription state.
+
+The initial failed-renewal cadence is three collection attempts on days
+0, 2, and 5, subject to provider capabilities. Notifications are sent
+immediately, after the second attempt, before day-8 suspension, and after
+suspension. Unresolved subscriptions remain suspended until day 30, then
+become canceled/expired according to paid-through dates. A payment-provider
+outage preserves previously verified access and queues reconciliation; it
+does not mass-suspend customers.
+
+### 10.5 Plan changes, cancellation, refunds, and excess usage
+
+- **Account before payment:** OAuth account and organization creation occur
+  before checkout. Checkout references are bound to the authenticated
+  organization, selected plan version, billing interval, and currency.
+- **Upgrade:** effective immediately after verified provider completion.
+  Apply provider-supported proration, show the exact charge first, and
+  update entitlements only through the internal lifecycle processor.
+- **Downgrade:** scheduled for the next billing-period boundary. Show
+  affected members, environments, agents, keys, webhooks, retention, and
+  usage before confirmation. Preserve data; block new activity after the
+  downgrade if the organization remains above its new limits.
+- **Cancellation:** self-service cancellation defaults to period end and
+  clearly displays the final access date. Reactivation before that date
+  removes the cancellation schedule. Immediate cancellation is an
+  exceptional support/finance action with explicit confirmation, reason,
+  and audit evidence.
+- **After expiration:** return the organization to Free when eligible.
+  Preserve data for the contracted retention window and allow export where
+  policy permits; never silently delete resources to satisfy lower limits.
+- **Refund baseline:** duplicate or erroneous charges are refunded.
+  A first self-service purchase may be refunded within seven calendar days
+  when usage is below 10% of the included allowance. Renewal and voluntary
+  mid-cycle cancellations are otherwise non-refundable and receive access
+  through period end. Statutory rights and Enterprise contracts override
+  this draft policy. No automatic prorated refund is promised.
+- **Promotions:** promotions are versioned, time-bound, non-stackable by
+  default, and recorded separately from plan price. A promotion never
+  changes entitlements unless it explicitly selects another plan version.
+- **Excess resources:** never delete members, agents, environments,
+  policies, reports, keys, or audit data automatically. Disable new
+  creation/reactivation until counts are within the effective plan.
+
+### 10.6 Approval gates
+
+The hosted subscription launch is blocked until named owners approve:
+
+1. Organization-as-payer and whether account-required access applies only
+   to hosted services (recommended) or also to offline SDK execution.
+2. Plan names, prices, currency, annual discount, trial terms, included
+   volume, overage rates, and support targets.
+3. OAuth/OIDC identity provider, consumer login providers, MFA policy,
+   Enterprise federation scope, and account-recovery policy.
+4. Billing provider versus merchant-of-record model, tax handling,
+   invoice numbering, currencies, and regions.
+5. Upgrade proration, failed-payment cadence, downgrade enforcement,
+   cancellation, refund, dispute, pause, and promotion policies.
+6. Customer-visible history, archive/export, deletion, legal hold, and
+   post-cancellation retention rules.
+7. Business/Enterprise SLA, support escalation, temporary entitlement,
+   refund approval, and two-person approval thresholds.
+8. Cost model and pilot evidence validating the draft prices and limits.

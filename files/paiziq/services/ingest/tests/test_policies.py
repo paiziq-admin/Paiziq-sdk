@@ -328,8 +328,30 @@ def test_rollback_writes_audit_log():
 
 def test_policy_mutations_write_audit_log():
     policy = _policy(_env()["id"])
+    updated = client.put(
+        f"/v1/policies/{policy['id']}/draft",
+        json={
+            "document": {"merchant_allowlist": ["trusted merchant"]},
+            "reason": "Approve the finance-owned merchant list",
+        },
+        headers=AUTH,
+    )
+    assert updated.status_code == 200, updated.text
     _publish(policy["id"])
     rows = store.connection.execute(
-        "SELECT action FROM audit_log WHERE resource = ? ORDER BY id", (policy["id"],)
+        "SELECT action, detail FROM audit_log WHERE resource = ? ORDER BY id",
+        (policy["id"],),
     ).fetchall()
-    assert [r[0] for r in rows] == ["policy.create", "policy.publish"]
+    assert [r[0] for r in rows] == [
+        "policy.create",
+        "policy.draft_update",
+        "policy.publish",
+    ]
+    assert "Approve the finance-owned merchant list" in rows[1][1]
+
+    blank = client.put(
+        f"/v1/policies/{policy['id']}/draft",
+        json={"document": {}, "reason": "   "},
+        headers=AUTH,
+    )
+    assert blank.status_code == 422

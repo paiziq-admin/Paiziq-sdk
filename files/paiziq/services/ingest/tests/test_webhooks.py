@@ -89,3 +89,48 @@ def test_worker_delivers_signed_payload():
     assert received["signature"] is not None
     from paiziq.webhooks import verify_webhook_signature
     assert verify_webhook_signature(received["body"], received["signature"], secret)
+
+
+def test_delivery_list_filters_by_environment_and_payment():
+    env = _env()
+    endpoint = client.post(
+        "/v1/webhook-endpoints",
+        json={
+            "env_id": env["id"],
+            "url": "https://example.com/correlation",
+            "events": ["payment.updated"],
+        },
+        headers=ADMIN,
+    ).json()["data"]
+    delivery_id = f"whd_{uuid.uuid4().hex}"
+    store.connection.execute(
+        "INSERT INTO webhook_deliveries "
+        "(id, endpoint_id, event_type, payload, state, attempts, "
+        "next_attempt_ms, created_at_ms, updated_at_ms) "
+        "VALUES (?, ?, 'payment.updated', ?, 'pending', 0, 0, 1, 1)",
+        (
+            delivery_id,
+            endpoint["id"],
+            json.dumps(
+                {
+                    "type": "payment.updated",
+                    "data": {"payment_id": "pay_correlated"},
+                }
+            ),
+        ),
+    )
+    store.connection.commit()
+
+    matched = client.get(
+        "/v1/webhook-deliveries"
+        f"?env_id={env['id']}&payment_id=pay_correlated",
+        headers=ADMIN,
+    ).json()
+    assert matched["meta"]["total"] == 1
+    assert matched["data"][0]["id"] == delivery_id
+
+    missing = client.get(
+        "/v1/webhook-deliveries?payment_id=pay_other",
+        headers=ADMIN,
+    ).json()
+    assert missing["meta"]["total"] == 0

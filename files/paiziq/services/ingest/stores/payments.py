@@ -100,6 +100,14 @@ class PaymentStore:
         state: Optional[str],
         limit: int,
         offset: int,
+        *,
+        currency: Optional[str] = None,
+        min_amount: Optional[float] = None,
+        max_amount: Optional[float] = None,
+        query: Optional[str] = None,
+        from_ms: Optional[int] = None,
+        to_ms: Optional[int] = None,
+        sort: str = "created_desc",
     ) -> tuple[list[dict[str, Any]], int]:
         clauses: list[str] = []
         params: list[Any] = []
@@ -107,13 +115,53 @@ class PaymentStore:
             if value is not None:
                 clauses.append(f"{column} = ?")
                 params.append(value)
+        if currency is not None:
+            clauses.append("currency = ?")
+            params.append(currency.upper())
+        if min_amount is not None:
+            clauses.append("amount >= ?")
+            params.append(min_amount)
+        if max_amount is not None:
+            clauses.append("amount <= ?")
+            params.append(max_amount)
+        if from_ms is not None:
+            clauses.append("created_at_ms >= ?")
+            params.append(from_ms)
+        if to_ms is not None:
+            clauses.append("created_at_ms <= ?")
+            params.append(to_ms)
+        if query:
+            escaped = (
+                query.lower()
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+            )
+            clauses.append(
+                "("
+                "LOWER(id) LIKE ? ESCAPE '\\' OR "
+                "LOWER(agent_id) LIKE ? ESCAPE '\\' OR "
+                "LOWER(principal_id) LIKE ? ESCAPE '\\' OR "
+                "LOWER(merchant) LIKE ? ESCAPE '\\' OR "
+                "LOWER(COALESCE(request_id, '')) LIKE ? ESCAPE '\\' OR "
+                "LOWER(intent_description) LIKE ? ESCAPE '\\'"
+                ")"
+            )
+            params.extend([f"%{escaped}%"] * 6)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        order_by = {
+            "created_desc": "created_at_ms DESC, id DESC",
+            "created_asc": "created_at_ms, id",
+            "amount_desc": "amount DESC, created_at_ms DESC, id DESC",
+            "amount_asc": "amount, created_at_ms DESC, id DESC",
+            "merchant_asc": "LOWER(merchant), created_at_ms DESC, id DESC",
+        }.get(sort, "created_at_ms DESC, id DESC")
         with self._lock:
             total = self._conn.execute(
                 f"SELECT COUNT(*) FROM payments {where}", params
             ).fetchone()[0]
             rows = self._conn.execute(
-                f"SELECT {_COLS} FROM payments {where} ORDER BY created_at_ms, id "
+                f"SELECT {_COLS} FROM payments {where} ORDER BY {order_by} "
                 "LIMIT ? OFFSET ?",
                 (*params, limit, offset),
             ).fetchall()

@@ -85,13 +85,24 @@ def create_decision(
         )
     )
 
+    actor = actor_for(api_key)
+    target_state = _VERDICT_TO_STATE[verdict.status.value]
+    if (
+        payment["state"] == "needs_review"
+        and target_state != "needs_review"
+        and reviews.open_for_payment(payment["id"]) is not None
+    ):
+        raise ApiError(
+            409,
+            "review_resolution_required",
+            "payment has an open review and must be resolved through the review API",
+        )
+
     record = decisions.create(
         payment["id"], policy_version, verdict.status.value,
         list(verdict.reasons), [f.value for f in verdict.risk_flags],
     )
 
-    actor = actor_for(api_key)
-    target_state = _VERDICT_TO_STATE[verdict.status.value]
     if payment["state"] != target_state:
         payments.transition(
             payment["id"], target_state, actor, f"decision {record['id']}"

@@ -33,9 +33,9 @@ const PAGE_ORDER = NAV.flatMap(g => g.items);
 const SECTIONS = {
   overview: [["What it does", "what"], ["The audit pipeline", "pipeline"], ["Why teams use it", "why"], ["First audit in 60 seconds", "first"]],
   quickstart: [["Install the SDK", "install"], ["Initialize the SDK", "init"], ["Review a payment", "review"], ["Execute with the 4-way match", "execute"]],
-  authentication: [["SDK API key", "keys"], ["Environment variables", "envvars"], ["Ingest service keys", "ingest"], ["Handling secrets", "secrets"]],
+  authentication: [["SDK API key", "keys"], ["Environment variables", "envvars"], ["Ingest service keys", "ingest"], ["Managed key roles", "roles"], ["Reviewer identity", "reviewer-identity"], ["Handling secrets", "secrets"]],
   concepts: [["Request → Decision → Audit", "model"], ["The decision engine", "rules"], ["The 4-Way Match", "fourway"], ["Spans & the wire contract", "spans"]],
-  webhooks: [["Notification severities", "types"], ["Payload shape", "payload"], ["Custom notifiers", "notifier"], ["Ingest endpoints", "ingestapi"]],
+  webhooks: [["Notification severities", "types"], ["Payload shape", "payload"], ["Custom notifiers", "notifier"], ["Ingest endpoints", "ingestapi"], ["Review workflow events", "reviewevents"], ["Exact delivery correlation", "deliverylookup"]],
   recipes: [["Guard a framework tool", "toolguard"], ["Scrub PII before export", "scrub"], ["Share budgets across replicas", "redis"]],
   api: [["PaiziqSDK", "sdk"], ["PaymentRequest", "request"], ["PaymentPolicy", "policy"], ["Decision", "decision"], ["Errors", "errors"]],
   changelog: [],

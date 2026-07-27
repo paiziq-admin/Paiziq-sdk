@@ -15,6 +15,9 @@ _DELIVERY_COLS = (
     "id, endpoint_id, event_type, payload, state, attempts, "
     "next_attempt_ms, last_error, created_at_ms, updated_at_ms"
 )
+_DELIVERY_JOIN_COLS = ", ".join(
+    f"wd.{column.strip()}" for column in _DELIVERY_COLS.split(",")
+)
 
 RETRY_MS = [60_000, 300_000, 1_800_000, 7_200_000]
 MAX_ATTEMPTS = 5
@@ -180,23 +183,43 @@ class WebhookStore:
         state: Optional[str],
         limit: int,
         offset: int,
+        *,
+        env_id: Optional[str] = None,
+        event_type: Optional[str] = None,
+        payment_id: Optional[str] = None,
+        review_id: Optional[str] = None,
     ) -> tuple[list[dict[str, Any]], int]:
         clauses: list[str] = []
         params: list[Any] = []
         if endpoint_id:
-            clauses.append("endpoint_id = ?")
+            clauses.append("wd.endpoint_id = ?")
             params.append(endpoint_id)
         if state:
-            clauses.append("state = ?")
+            clauses.append("wd.state = ?")
             params.append(state)
+        if env_id:
+            clauses.append("we.env_id = ?")
+            params.append(env_id)
+        if event_type:
+            clauses.append("wd.event_type = ?")
+            params.append(event_type)
+        if payment_id:
+            clauses.append("json_extract(wd.payload, '$.data.payment_id') = ?")
+            params.append(payment_id)
+        if review_id:
+            clauses.append("json_extract(wd.payload, '$.data.review_id') = ?")
+            params.append(review_id)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         with self._lock:
             total = self._conn.execute(
-                f"SELECT COUNT(*) FROM webhook_deliveries {where}", tuple(params)
+                "SELECT COUNT(*) FROM webhook_deliveries wd "
+                f"JOIN webhook_endpoints we ON we.id = wd.endpoint_id {where}",
+                tuple(params),
             ).fetchone()[0]
             rows = self._conn.execute(
-                f"SELECT {_DELIVERY_COLS} FROM webhook_deliveries {where} "
-                "ORDER BY created_at_ms DESC, id LIMIT ? OFFSET ?",
+                f"SELECT {_DELIVERY_JOIN_COLS} FROM webhook_deliveries wd "
+                f"JOIN webhook_endpoints we ON we.id = wd.endpoint_id {where} "
+                "ORDER BY wd.created_at_ms DESC, wd.id LIMIT ? OFFSET ?",
                 tuple(params) + (limit, offset),
             ).fetchall()
         return [_delivery_row(r) for r in rows], total

@@ -27,7 +27,7 @@ Local development (all commands are automated — see `make help`):
 ```bash
 make venv install   # python3 -m venv + editable install with dev extras
 make test           # SDK test suite
-make check          # full quality gate: lint + tests + examples
+make check          # full quality gate: lint + SDK/ingest tests + examples
 ```
 
 ## Quickstart
@@ -125,6 +125,36 @@ paiziq dashboard deploy && paiziq dashboard serve            # local dashboard
 paiziq replay <trace_id>              # pretty-print a trace's span tree
 ```
 
+## Control-plane review workflow
+
+The backend exposes a read-scoped queue at `GET /v1/reviews` with
+environment, state, assignee, priority, pagination, and SLA data.
+`GET /v1/reviews/identity` reports the authenticated key's reviewer
+name, role, and environment binding.
+Reviewer- or admin-capable keys can claim/release/reassign work,
+request more information, escalate priority, and approve or decline
+with a required note.
+For database-managed keys, the key name is the acting reviewer identity
+and all review reads/actions are restricted to the key's environment;
+bootstrap admins remain unscoped and may supply an operator label.
+Re-evaluating a `needs_review` payment reuses its existing open review.
+Generic payment transitions and re-evaluation cannot bypass that open
+review to approve or reject it.
+Resolution atomically updates the review, underlying payment, and
+append-only payment transition. Each
+workflow action then appends an audit entry and enqueues an outbound
+webhook event that is signed at delivery. See the
+[API contract](docs/06_API_CONTRACT.md#9-reviews-pz-101) for exact
+routes and request bodies.
+
+Dashboard-facing list/query behavior is server-side: payments support
+currency, amount, text, time, and sort parameters in addition to
+environment/agent/state and exact `meta.total` pagination; metrics
+summary includes payment-state and risk-flag counts while timeseries
+supports `payments.total`; and webhook deliveries support exact
+environment/event/payment/review correlation. Policy draft updates may
+include a nonblank audit reason, recorded as `policy.draft_update`.
+
 ## Extensibility
 
 - **Custom rules**: implement the `Rule` protocol and `engine.add_rule(...)`.
@@ -153,9 +183,9 @@ paiziq/
 │   │   ├── webhooks.py         # HMAC webhook signature verification
 │   │   ├── notifications/      # harmful-intent + review alerts
 │   │   └── audit/              # audit stores + gateway abstraction
-│   ├── tests/                  # 165 unit, property-based, and e2e tests
+│   ├── tests/                  # unit, property-based, and e2e tests
 │   └── examples/               # happy path, integrations, payment agent
-└── services/ingest/            # FastAPI ingest + control plane (+ 80 tests)
+└── services/ingest/            # FastAPI ingest + control plane and service tests
 ```
 
 ## Documentation

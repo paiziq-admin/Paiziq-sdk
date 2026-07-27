@@ -1,7 +1,7 @@
 # Paiziq Developer Guide
 
 Audience: engineers contributing to the Paiziq SDK or the ingest
-service. Read `01_EXECUTIVE_SCOPE.md` for the why, `02_ARCHITECTURE.md`
+service. Read `01_PRODUCT_SCOPE.md` for the why, `02_ARCHITECTURE.md`
 for the how, `03_BUILD_DEPLOY_PLAN.md` for the when. This guide covers
 day-to-day development. Implementation status lives in
 `05_PROGRESS_TRACKER.md`; per-version change history in `../CHANGELOG.md`.
@@ -28,7 +28,7 @@ paiziq/
 │   └── examples/             # runnable end-to-end examples
 └── services/ingest/          # FastAPI ingest + control plane service
     ├── app.py                # endpoints, auth, limits
-    ├── routers/              # orgs, agents, keys, payments, decisions
+    ├── routers/              # orgs, agents, keys, payments, decisions, reviews
     ├── stores/               # per-entity SQLite stores
     ├── config.py             # env-driven settings, fail-fast validation
     ├── storage.py            # SQLite IngestStore (swap for RDS later)
@@ -41,7 +41,12 @@ paiziq/
 
 Schema changes ship as a new numbered file in
 `services/ingest/migrations/` — never edit an applied migration.
-Migrations run automatically when the service opens its database.
+Migrations run automatically when the service opens its database, in
+numeric order, exactly once, with one transaction per file. Migration
+`0008_review_workflows.sql` alters existing review rows in place, sets
+`updated_at_ms = created_at_ms` for pre-workflow rows, and adds indexes
+for assignee/state, priority/SLA, and payment/state queries. A failure
+rolls back that migration and aborts startup.
 
 ## 2. Getting started
 
@@ -86,6 +91,20 @@ commands on every push and pull request.
   update or delete operations.
 - **Enforcement at the tool boundary.** Framework wrappers gate the
   payment tool call; they do not try to police the model's text.
+- **One open review per decisioning flow.** Re-evaluation may begin only
+  from `proposed` or `needs_review`; another `needs_review` verdict
+  reuses the existing open review and updates its decision pointer.
+- **No review bypass.** An open review must reach `approved` or
+  `rejected` through the review API. Generic payment transitions and a
+  terminal re-evaluation return `409 review_resolution_required`.
+- **Authenticated reviewer identity.** Database-managed review access is
+  restricted to the key's `env_id`; acting reviewer IDs must match the
+  key name and mutations require `review` or `admin`. Reassignment names
+  a target reviewer, but non-admin callers must own the item.
+- **Atomic resolution.** Review state, payment state, and the
+  append-only payment transition commit or roll back together.
+- **Audited policy drafts.** A supplied draft `reason` must be nonblank
+  and is stored in the `policy.draft_update` audit detail.
 
 ## 5. Versioning and documentation rules
 
@@ -149,8 +168,9 @@ paiziq replay <trace_id>                       # pretty-print a span tree
 ```
 
 `dashboard serve` proxies API reads server-side so the key never
-reaches the browser; the hosted dashboard remains a separate
-workstream.
+reaches the browser. The full live operator dashboard is maintained in
+the companion `Paiziq-Dashboard` repository and uses its own tab-scoped
+browser session model.
 
 ## 9. Releasing
 

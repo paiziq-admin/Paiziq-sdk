@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import app, store  # noqa: E402
+from auth import actor_for  # noqa: E402
 
 AUTH = {"Authorization": "Bearer dev-key"}
 client = TestClient(app)
@@ -124,4 +125,4 @@ def test_mutations_write_audit_log():
     rows = store.connection.execute(
         "SELECT actor, action FROM audit_log WHERE resource = ?", (org["id"],)
     ).fetchall()
-    assert rows == [("key:dev-key", "org.create")]
+    assert rows == [(actor_for("dev-key"), "org.create")]

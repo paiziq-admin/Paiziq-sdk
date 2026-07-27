@@ -9,6 +9,34 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Hosted account and subscription commercialization plan (PZ-102):
+  organization-as-customer model, OAuth/OIDC account requirement,
+  human-versus-machine identity boundary, versioned feature/entitlement
+  catalog, draft Free/Basic/Professional/Business/Enterprise matrix,
+  internal lifecycle and commercial policies, provider-independent billing
+  architecture, local/development/production isolation, phased
+  implementation backlog, reconciliation/metrics, scenario tests, and
+  controlled-launch acceptance gates. This planning change does not claim
+  that login, billing, or entitlement runtime functionality is shipped.
+- Human-review workflow API (PZ-101): paginated, environment-scoped
+  review queue/detail reads plus `GET /v1/reviews/identity`; reviewer
+  claim, release, and reassignment;
+  note-gated request-more-info, escalation, approval, and decline
+  actions; priority/SLA fields; atomic payment resolution; review-scope
+  RBAC; managed key-name/environment identity binding; append-only audit
+  entries; and signed `review.*` event fan-out. Re-evaluation reuses the
+  canonical open review, and payment/decision transition guards prevent
+  approval or rejection outside the review API. Includes transactional
+  migration `0008` (workflow columns, timestamp backfill, queue indexes),
+  OpenAPI/client-type regeneration, and end-to-end service tests.
+- Dashboard query contracts: `GET /v1/payments` now applies currency,
+  inclusive amount/time ranges, escaped multi-field text search, and
+  deterministic sort modes before exact pagination; metrics summary
+  exposes grouped `risk_flags` and payment counts and timeseries supports
+  `payments.total`; webhook delivery lists accept exact `env_id`,
+  `event_type`, `payment_id`, and `review_id` correlation.
+- Policy draft updates accept an optional nonblank audit `reason` and
+  append `policy.draft_update` with that reason in the audit detail.
 - Webhook delivery engine with signed outbound payloads, retry/DLQ queue,
   delivery logs, and event routing for decisions, payments, and review SLA
   breaches (PZ-076/PZ-077/PZ-078): `stores/webhooks.py`, `webhook_worker.py`,

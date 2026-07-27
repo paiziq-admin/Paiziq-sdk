@@ -14,9 +14,22 @@ from starlette.responses import JSONResponse
 import deps
 from audit import AuditLog
 from auth import actor_for, require_api_key, settings
-from envelope import ApiError, install_error_handlers
+from envelope import install_error_handlers
 from rate_limit import RateLimiter
-from routers import admin, agents, audit, decisions, keys, metrics, orgs, payments, policies, search, webhooks
+from routers import (
+    admin,
+    agents,
+    audit,
+    decisions,
+    keys,
+    metrics,
+    orgs,
+    payments,
+    policies,
+    reviews,
+    search,
+    webhooks,
+)
 from storage import IngestStore
 from webhook_worker import worker_loop
 
@@ -81,6 +94,7 @@ app.include_router(agents.router)
 app.include_router(keys.router)
 app.include_router(payments.router)
 app.include_router(decisions.router)
+app.include_router(reviews.router)
 app.include_router(policies.router)
 app.include_router(webhooks.router)
 app.include_router(metrics.router)

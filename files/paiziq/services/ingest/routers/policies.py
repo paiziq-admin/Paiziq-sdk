@@ -87,6 +87,7 @@ def get_policy(
 
 class DraftUpdate(BaseModel):
     document: dict[str, Any]
+    reason: Optional[str] = Field(default=None, max_length=2000)
 
 
 @router.put("/v1/policies/{policy_id}/draft")
@@ -98,9 +99,17 @@ def update_draft(
     audit: AuditLog = Depends(get_audit_log),
 ) -> dict[str, Any]:
     _require_policy(policies, policy_id)
+    reason = body.reason.strip() if body.reason is not None else None
+    if body.reason is not None and not reason:
+        raise ApiError(422, "validation_error", "reason must not be blank")
     record = policies.update_draft(policy_id, _normalized(body.document))
     assert record is not None
-    audit.record(actor_for(api_key), "policy.draft_update", policy_id, {})
+    audit.record(
+        actor_for(api_key),
+        "policy.draft_update",
+        policy_id,
+        {"reason": reason},
+    )
     return ok(record)
 
 
