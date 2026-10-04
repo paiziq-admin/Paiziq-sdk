@@ -9,6 +9,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- 2026-10-03: Root-level SDK CI and automatic Azure backend deployment for
+  pushes/merges to `main`, with `make check`, distribution build, container
+  smoke and hosted smoke gates. Uses a main-only GitHub OIDC identity and
+  retains existing runtime secrets and persistent volumes. Existing revisions
+  must stop before the image update; redeployments have a brief outage.
+  Completed CI runs notify contributors/collaborators in a GitHub results
+  thread. `main` and `Dev` use the development tree; no main-only files are
+  imported. Owner-granted Azure roles are required for backend deployment.
+
 - 2026-10-03: Runnable backend deployment package and Azure guide.
   Completed `services/ingest/Dockerfile` (installs the local SDK, runs as a
   non-root user, persistent `/data` SQLite volume, health check) with a

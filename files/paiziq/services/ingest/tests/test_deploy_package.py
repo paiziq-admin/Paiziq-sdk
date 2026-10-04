@@ -227,6 +227,15 @@ def test_smoke_cli_requires_api_key_env(monkeypatch, capsys):
     assert "PAIZIQ_API_KEY" in capsys.readouterr().err
 
 
+def test_smoke_cli_credential_free_mode_checks_health_and_auth_rejection(base_url, monkeypatch, capsys):
+    monkeypatch.delenv("PAIZIQ_API_KEY", raising=False)
+    assert smoke_backend.main(["--endpoint", base_url, "--unauthenticated"]) == 0
+    output = capsys.readouterr().out
+    assert "3/3 checks passed" in output
+    assert "wrong_key_rejected" in output and "missing_key_rejected" in output
+    assert "login_probe" not in output
+
+
 @pytest.fixture(scope="module")
 def demo(base_url, tmp_path_factory):
     report_path = tmp_path_factory.mktemp("northstar") / "run.json"

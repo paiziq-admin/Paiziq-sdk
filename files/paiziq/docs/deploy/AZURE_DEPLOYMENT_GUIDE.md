@@ -11,11 +11,73 @@ the dashboard. Last updated 2026-10-03.
 | Backend container package (`services/ingest/Dockerfile`, `entrypoint.sh`, `.dockerignore`) | Verified locally | `make docker-smoke` builds the image, starts it in production mode, and passes 5/5 smoke checks |
 | Northstar demo runner (`scripts/northstar_demo.py`) | Verified locally | Run against the production-mode container: approved / needs_review / rejected, read-only key issued, CORS preflight allowed |
 | Deployment lane tests (`tests/test_deploy_package.py`) | Passing | 14 tests under `make ingest-test` |
-| Azure deploy script (`deploy/azure/deploy_backend.sh`) | Written, syntax-checked, **not yet executed** | Requires the Azure CLI and subscription access; this machine has neither `az` nor `gh` installed |
+| Azure backend | Online | `https://paiziq-ingest-dev.whiteforest-4bca54b1.eastus2.azurecontainerapps.io`; East US 2, existing persistent volume |
 | Dashboard publish from the `dev` branch | Documented, **not yet performed** | Needs a push to GitHub and a manual workflow dispatch |
 
 Nothing in this guide seeds the static dashboard. The dashboard reads live data
 from the backend; the demo creates that data through the SDK.
+
+### Automatic main-branch CI
+
+The repository-root `.github/workflows/ci.yml` is **SDK CI and Azure deployment**.
+The workflows under `files/paiziq/.github/` are historical project templates;
+GitHub only discovers workflows at the repository root.
+
+Every push or merge to `main` runs `make check build` with Python 3.12. Ruff is
+pinned to 0.4.10 in CI to match the validated lint rules. Pull requests run the
+quality gate and build without accessing deployment credentials. Manual runs
+deploy only when selected on `main`.
+
+After quality passes, CI builds and smoke-tests the Linux container, pushes
+`paiziqdevacr8406cce0.azurecr.io/paiziq-ingest:<full commit SHA>`, and runs
+`make ci-deploy-azure`. This uses `deploy_existing_backend.sh` rather than the
+full infrastructure bootstrap script: it retains existing secrets, registry
+credentials, environment variables and the Azure Files mount. Old active
+revisions are deactivated and must have zero replicas before the update.
+Expect a short outage; SQLite remains a single-process development setup.
+Hosted health, invalid/missing-key rejection and CORS smoke checks must pass
+for a successful run. CI does not store a backend API key and does not perform
+the positive authenticated login probe; the container smoke lane checks that
+probe with an ephemeral local-only key.
+
+GitHub repository configuration:
+
+| Setting | Type | Value / purpose |
+| --- | --- | --- |
+| `AZURE_CLIENT_ID` | Variable | `58867675-6e0c-475f-a09b-34e93833900c` |
+| `AZURE_TENANT_ID` | Variable | `4a384267-1d1e-4008-b8ba-10d00c3b5f71` |
+| `AZURE_SUBSCRIPTION_ID` | Variable | `8406cce0-3a67-4d8e-b536-965b930989af` |
+| `CI_NOTIFICATION_ISSUE` | Variable | Number of the CI results issue |
+| `CI_NOTIFICATION_USERS` | Variable | Fallback collaborator usernames, space-separated |
+
+The managed identity `paiziq-github-deploy` trusts only GitHub OIDC subject
+`repo:paiziq-admin/Paiziq-sdk:ref:refs/heads/main`. No Azure client secret or
+cached personal login is stored in GitHub. An Azure Owner / User Access
+Administrator must grant these roles to principal
+`171abb64-1aad-4bec-b59f-aa935eca4c1a` before backend CI can deploy:
+
+```bash
+az role assignment create \
+  --assignee-object-id 171abb64-1aad-4bec-b59f-aa935eca4c1a \
+  --assignee-principal-type ServicePrincipal --role Contributor \
+  --scope /subscriptions/8406cce0-3a67-4d8e-b536-965b930989af/resourceGroups/paiziq-dev/providers/Microsoft.App/containerApps/paiziq-ingest-dev
+az role assignment create \
+  --assignee-object-id 171abb64-1aad-4bec-b59f-aa935eca4c1a \
+  --assignee-principal-type ServicePrincipal --role AcrPush \
+  --scope /subscriptions/8406cce0-3a67-4d8e-b536-965b930989af/resourceGroups/paiziq-dev/providers/Microsoft.ContainerRegistry/registries/paiziqdevacr8406cce0
+```
+
+Subscription Contributor cannot create role assignments. Until those grants
+exist, backend quality/build checks run, but Azure deployment fails. After the
+Owner grants access, rerun the failed workflow from Actions.
+
+`notify-ci.yml` reports every completed CI run in a dedicated issue, including
+success, failure and cancellation, and mentions contributors/collaborators.
+Contributor discovery is live; if collaborator enumeration is denied, the
+configured fallback list is used. Update that list when repository access
+changes. GitHub email/inbox delivery remains subject to users' notification
+preferences. The dashboard has equivalent main deployment and notifications;
+its existing Static Web Apps deployment-token secret is retained.
 
 ## 2. Topology
 
@@ -408,9 +470,9 @@ Or `IMAGE_TAG=<previous sha> ./deploy/azure/deploy_backend.sh --skip-build`.
 
 - **Northstar demo** = the deterministic three-payment scenario from the E2E
   suite run by the real SDK (see §7). Confirm or replace the scenario.
-- The Azure CLI steps were not executed from the authoring machine (no `az`
-  installed); the script is syntax-checked and its spec-patching code is unit
-  tested, but the first real run should be watched end to end.
+- The backend is deployed. Automatic redeployment uses the existing-app CI
+  lane above; the original bootstrap script is retained for infrastructure
+  setup and should be watched when used for a new environment.
 - The dashboard merge/dispatch (§6) is documented, not performed; it touches a
   GitHub repository and should be done by an operator with push rights.
 - SQLite on Azure Files is a development-tier arrangement: single replica, no

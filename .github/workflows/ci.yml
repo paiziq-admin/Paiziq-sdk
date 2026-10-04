@@ -1,0 +1,76 @@
+name: SDK CI and Azure deployment
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: files/paiziq
+    shell: bash
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Install development dependencies
+        run: |
+          make venv install ingest-install
+          sdk/.venv/bin/python -m pip install ruff==0.4.10
+      - name: Run repository quality gate and build SDK
+        run: make check build
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: paiziq-dist
+          path: files/paiziq/sdk/dist/
+          retention-days: 3
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZ_RESOURCE_GROUP: paiziq-dev
+      AZ_APP_NAME: paiziq-ingest-dev
+      AZ_ACR_NAME: paiziqdevacr8406cce0
+      AZ_IMAGE: paiziqdevacr8406cce0.azurecr.io/paiziq-ingest:${{ github.sha }}
+      PAIZIQ_ENDPOINT: https://paiziq-ingest-dev.whiteforest-4bca54b1.eastus2.azurecontainerapps.io
+      PAIZIQ_DASHBOARD_URL: https://brave-river-0a6dd1310.5.azurestaticapps.net
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Build and smoke-test the container
+        run: make docker-smoke DOCKER_IMAGE="$AZ_IMAGE" PAIZIQ_CORS_ORIGINS="$PAIZIQ_DASHBOARD_URL"
+      - name: Sign in to Azure with GitHub OIDC
+        uses: azure/login@8216e11d8cd9b42fe925c852af8e76311ff067ac # v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Push the immutable image
+        run: |
+          az extension add --name containerapp --upgrade --only-show-errors
+          az acr login --name "$AZ_ACR_NAME" --only-show-errors
+          docker push "$AZ_IMAGE"
+      - name: Update the existing backend and verify it
+        run: make ci-deploy-azure

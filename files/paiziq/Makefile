@@ -12,7 +12,7 @@ PIP         := $(PY) -m pip
 .PHONY: help venv install lint typecheck test coverage examples build \
         openapi ingest-install ingest-test ingest-run check clean \
         e2e-stack e2e-seed e2e-verify e2e-test \
-        docker-build docker-smoke smoke northstar-demo deploy-azure
+        docker-build docker-smoke smoke ci-smoke northstar-demo deploy-azure ci-deploy-azure
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -104,12 +104,19 @@ smoke: ## Smoke-test a running backend (PAIZIQ_ENDPOINT, PAIZIQ_API_KEY, optiona
 	@PAIZIQ_API_KEY="$(PAIZIQ_API_KEY)" python3 $(INGEST_DIR)/scripts/smoke_backend.py \
 		--endpoint "$(PAIZIQ_ENDPOINT)" $(if $(PAIZIQ_DASHBOARD_URL),--origin "$(PAIZIQ_DASHBOARD_URL)",)
 
+ci-smoke: ## Check hosted health, authentication rejection and CORS without a server credential
+	@python3 $(INGEST_DIR)/scripts/smoke_backend.py --unauthenticated \
+		--endpoint "$(PAIZIQ_ENDPOINT)" $(if $(PAIZIQ_DASHBOARD_URL),--origin "$(PAIZIQ_DASHBOARD_URL)",)
+
 northstar-demo: ## Run the Northstar payment-agent demo with the real SDK against PAIZIQ_ENDPOINT
 	@cd $(INGEST_DIR) && PAIZIQ_API_KEY="$(PAIZIQ_API_KEY)" ../../$(VENV)/bin/python scripts/northstar_demo.py \
 		--endpoint "$(PAIZIQ_ENDPOINT)" $(if $(PAIZIQ_DASHBOARD_URL),--dashboard-url "$(PAIZIQ_DASHBOARD_URL)",)
 
 deploy-azure: ## Deploy the backend to Azure Container Apps (see deploy/azure/backend.env.example)
 	./deploy/azure/deploy_backend.sh
+
+ci-deploy-azure: ## Update the existing Azure backend, retain configuration, and run hosted smoke
+	bash ./deploy/azure/deploy_existing_backend.sh
 
 check: lint test ingest-test examples ## Full quality gate (lint + all tests + examples)
 	@echo "All checks passed."

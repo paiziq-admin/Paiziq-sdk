@@ -170,12 +170,14 @@ def run_smoke(
     api_key: str,
     origin: Optional[str] = None,
     timeout_s: float = 10.0,
+    authenticated_probe: bool = True,
 ) -> list[CheckResult]:
     base_url = base_url.rstrip("/")
     results = [check_health(base_url, timeout_s)]
     if not results[0].passed:
         return results
-    results.append(check_login_probe(base_url, api_key, timeout_s))
+    if authenticated_probe:
+        results.append(check_login_probe(base_url, api_key, timeout_s))
     results.append(check_wrong_key_rejected(base_url, timeout_s))
     results.append(check_missing_key_rejected(base_url, timeout_s))
     if origin:
@@ -196,14 +198,21 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="dashboard origin to preflight (env PAIZIQ_DASHBOARD_ORIGIN)",
     )
     parser.add_argument("--timeout", type=float, default=10.0)
+    parser.add_argument(
+        "--unauthenticated", action="store_true",
+        help="check health, invalid/missing key rejection and CORS without a valid API key",
+    )
     args = parser.parse_args(argv)
 
     api_key = os.environ.get("PAIZIQ_API_KEY", "")
-    if not api_key:
+    if not api_key and not args.unauthenticated:
         print("PAIZIQ_API_KEY is required (never pass secrets as CLI arguments)", file=sys.stderr)
         return 2
 
-    results = run_smoke(args.endpoint, api_key, args.origin, args.timeout)
+    results = run_smoke(
+        args.endpoint, api_key, args.origin, args.timeout,
+        authenticated_probe=not args.unauthenticated,
+    )
     width = max(len(result.name) for result in results)
     for result in results:
         marker = "PASS" if result.passed else "FAIL"
