@@ -11,6 +11,14 @@ import pytest
 SCRIPT = Path(__file__).resolve().parents[3] / "deploy/azure/deploy_existing_backend.sh"
 
 
+def test_make_help_exposes_ci_and_new_demo_targets():
+    project = Path(__file__).resolve().parents[3]
+    result = subprocess.run(["make", "help"], cwd=project, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    for target in ("ci-smoke", "ci-deploy-azure", "procurement-demo", "phase0-demo"):
+        assert target in result.stdout
+
+
 @pytest.mark.parametrize("stuck", [False, True])
 def test_ci_deployment_waits_for_all_old_writers_and_retains_configuration(tmp_path, stuck):
     calls = tmp_path / "calls.jsonl"

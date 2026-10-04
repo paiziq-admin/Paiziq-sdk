@@ -43,6 +43,8 @@ done
 : "${PAIZIQ_CORS_ORIGINS:=}"
 : "${PAIZIQ_SECRETS_KEY:=}"
 : "${PAIZIQ_REVIEW_SLA_MS:=}"
+: "${AZ_ACR_PULL_USERNAME:=}"
+: "${AZ_ACR_PULL_PASSWORD:=}"
 IMAGE_REPO="paiziq-ingest"
 if [ -z "${IMAGE_TAG:-}" ]; then
   IMAGE_TAG="$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || date -u +%Y%m%d%H%M%S)"
@@ -60,6 +62,10 @@ esac
 FIRST_KEY="${PAIZIQ_INGEST_KEYS%%,*}"
 [ "${#FIRST_KEY}" -ge 24 ] || fail "the first PAIZIQ_INGEST_KEYS entry must be at least 24 characters"
 FIRST_ORIGIN="${PAIZIQ_CORS_ORIGINS%%,*}"
+if [ -n "$AZ_ACR_PULL_USERNAME" ] || [ -n "$AZ_ACR_PULL_PASSWORD" ]; then
+  [ -n "$AZ_ACR_PULL_USERNAME" ] && [ -n "$AZ_ACR_PULL_PASSWORD" ] \
+    || fail "AZ_ACR_PULL_USERNAME and AZ_ACR_PULL_PASSWORD must both be supplied"
+fi
 
 command -v az >/dev/null 2>&1 || fail "Azure CLI (az) is not installed: https://learn.microsoft.com/cli/azure/install-azure-cli"
 command -v python3 >/dev/null 2>&1 || fail "python3 is required"
@@ -78,7 +84,9 @@ for ns in Microsoft.App Microsoft.OperationalInsights Microsoft.ContainerRegistr
 done
 
 log "Resource group ${AZ_RESOURCE_GROUP} in ${AZ_LOCATION}"
-az group create --name "$AZ_RESOURCE_GROUP" --location "$AZ_LOCATION" --only-show-errors >/dev/null
+if [ "$(az group exists --name "$AZ_RESOURCE_GROUP" -o tsv)" != "true" ]; then
+  az group create --name "$AZ_RESOURCE_GROUP" --location "$AZ_LOCATION" --only-show-errors >/dev/null
+fi
 
 # --- container registry and image -----------------------------------------
 log "Container registry ${AZ_ACR_NAME}"
@@ -142,20 +150,48 @@ if [ -n "$PAIZIQ_SECRETS_KEY" ]; then
 fi
 
 log "Container app ${AZ_APP_NAME}"
+stop_active_revisions() {
+  # nobrl disables server byte-range locking. Stop every existing writer
+  # before changing image, environment and volume in one template update.
+  log "Stopping active revisions before updating the single-writer database"
+  ACTIVE_REVISIONS="$(az containerapp revision list --name "$AZ_APP_NAME" --resource-group "$AZ_RESOURCE_GROUP" \
+    --query '[?properties.active].name' -o tsv)"
+  while IFS= read -r revision; do
+    [ -z "$revision" ] && continue
+    az containerapp revision deactivate --name "$AZ_APP_NAME" \
+      --resource-group "$AZ_RESOURCE_GROUP" --revision "$revision" --only-show-errors >/dev/null
+    REPLICAS=1
+    for _ in $(seq 1 30); do
+      REPLICAS="$(az containerapp replica list --name "$AZ_APP_NAME" --resource-group "$AZ_RESOURCE_GROUP" \
+        --revision "$revision" --query 'length(@)' -o tsv --only-show-errors)"
+      [ "$REPLICAS" = "0" ] && break
+      sleep 2
+    done
+    [ "$REPLICAS" = "0" ] || fail "old revision $revision still has replicas; refusing concurrent SQLite writers"
+  done <<< "$ACTIVE_REVISIONS"
+}
+# Contributor cannot create AcrPull role assignments. An optional repository-
+# scoped ACR pull token avoids enabling the registry's broad admin account.
+REGISTRY_ARGS=(--registry-identity system)
+if [ -n "$AZ_ACR_PULL_USERNAME" ]; then
+  REGISTRY_ARGS=(--registry-username "$AZ_ACR_PULL_USERNAME" --registry-password "$AZ_ACR_PULL_PASSWORD")
+fi
 if ! az containerapp show --name "$AZ_APP_NAME" --resource-group "$AZ_RESOURCE_GROUP" --only-show-errors >/dev/null 2>&1; then
   az containerapp create --name "$AZ_APP_NAME" --resource-group "$AZ_RESOURCE_GROUP" \
     --environment "$AZ_ACA_ENV" --image "$IMAGE" \
-    --registry-server "$ACR_SERVER" --registry-identity system \
+    --registry-server "$ACR_SERVER" "${REGISTRY_ARGS[@]}" \
     --ingress external --target-port 8800 --transport auto \
     --min-replicas 1 --max-replicas 1 --cpu 0.5 --memory 1.0Gi \
     --revision-suffix "r${IMAGE_TAG//[^a-z0-9]/}" \
     --secrets "${SECRET_ARGS[@]}" --env-vars "${ENV_ARGS[@]}" --only-show-errors >/dev/null
 else
+  if [ -n "$AZ_ACR_PULL_USERNAME" ]; then
+    az containerapp registry set --name "$AZ_APP_NAME" --resource-group "$AZ_RESOURCE_GROUP" \
+      --server "$ACR_SERVER" --username "$AZ_ACR_PULL_USERNAME" --password "$AZ_ACR_PULL_PASSWORD" \
+      --only-show-errors >/dev/null
+  fi
   az containerapp secret set --name "$AZ_APP_NAME" --resource-group "$AZ_RESOURCE_GROUP" \
     --secrets "${SECRET_ARGS[@]}" --only-show-errors >/dev/null
-  az containerapp update --name "$AZ_APP_NAME" --resource-group "$AZ_RESOURCE_GROUP" \
-    --image "$IMAGE" --min-replicas 1 --max-replicas 1 \
-    --set-env-vars "${ENV_ARGS[@]}" --only-show-errors >/dev/null
 fi
 
 # --- mount the file share at /data with SQLite-safe options ---------------
@@ -165,11 +201,24 @@ log "Mounting ${AZ_STORAGE_LINK} at /data (nobrl, uid/gid 10001)"
 SPEC_FILE="$(mktemp -t paiziq-aca.XXXXXX.json)"
 trap 'rm -f "$SPEC_FILE"' EXIT
 az containerapp show --name "$AZ_APP_NAME" --resource-group "$AZ_RESOURCE_GROUP" -o json > "$SPEC_FILE"
-python3 - "$SPEC_FILE" "$AZ_STORAGE_LINK" <<'PY'
+python3 - "$SPEC_FILE" "$AZ_STORAGE_LINK" "$IMAGE" "${ENV_ARGS[@]}" <<'PY'
 import json, sys
-path, storage_link = sys.argv[1], sys.argv[2]
+path, storage_link, image = sys.argv[1:4]
 spec = json.load(open(path))
 template = spec["properties"]["template"]
+# Apply the desired image and environment together with the volume. A separate
+# image update followed by a volume revision could overlap SQLite writers.
+container = template["containers"][0]
+container["image"] = image
+env = {item["name"]: item for item in (container.get("env") or [])}
+for setting in sys.argv[4:]:
+    name, value = setting.split("=", 1)
+    field = "secretRef" if value.startswith("secretref:") else "value"
+    env[name] = {"name": name, field: value.removeprefix("secretref:") if field == "secretRef" else value}
+container["env"] = list(env.values())
+# An exported suffix belongs to the previous immutable revision. Let Azure
+# assign a fresh suffix for the volume update rather than reusing it.
+template.pop("revisionSuffix", None)
 volume = {
     "name": "data",
     "storageType": "AzureFile",
@@ -184,6 +233,7 @@ for container in template["containers"]:
 template["scale"] = {**(template.get("scale") or {}), "minReplicas": 1, "maxReplicas": 1}
 json.dump(spec, open(path, "w"), indent=2)
 PY
+stop_active_revisions
 az containerapp update --name "$AZ_APP_NAME" --resource-group "$AZ_RESOURCE_GROUP" \
   --yaml "$SPEC_FILE" --only-show-errors >/dev/null
 

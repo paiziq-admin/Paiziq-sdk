@@ -12,11 +12,8 @@ PIP         := $(PY) -m pip
 .PHONY: help venv install lint typecheck test coverage examples build \
         openapi ingest-install ingest-test ingest-run check clean \
         e2e-stack e2e-seed e2e-verify e2e-test \
-<<<<<<< Updated upstream
-        docker-build docker-smoke smoke ci-smoke northstar-demo deploy-azure ci-deploy-azure
-=======
-        docker-build docker-smoke smoke northstar-demo procurement-demo phase0-demo deploy-azure
->>>>>>> Stashed changes
+        docker-build docker-smoke smoke ci-smoke northstar-demo \
+        procurement-demo phase0-demo deploy-azure ci-deploy-azure
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | \

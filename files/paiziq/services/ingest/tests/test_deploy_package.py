@@ -102,6 +102,95 @@ def test_deploy_script_and_env_example_are_consistent():
 # --- entrypoint subprocess ------------------------------------------------------
 
 
+@pytest.mark.parametrize("missing", ["AZ_ACR_PULL_USERNAME", "AZ_ACR_PULL_PASSWORD"])
+def test_deploy_rejects_partial_registry_credentials(missing):
+    env = {
+        **os.environ,
+        "AZ_ACR_NAME": "testregistry",
+        "AZ_STORAGE_ACCOUNT": "teststorage",
+        "PAIZIQ_INGEST_KEYS": secrets.token_urlsafe(32),
+        "AZ_ACR_PULL_USERNAME": "test-pull",
+        "AZ_ACR_PULL_PASSWORD": secrets.token_urlsafe(32),
+    }
+    env[missing] = ""
+    result = subprocess.run(["bash", str(DEPLOY_SCRIPT)], env=env, capture_output=True, text=True)
+    assert result.returncode == 1
+    assert "must both be supplied" in result.stderr
+
+
+@pytest.mark.parametrize("existing_app", [False, True])
+def test_deploy_uses_scoped_registry_credentials_without_logging_secrets(tmp_path, existing_app):
+    calls_path = tmp_path / "calls.jsonl"
+    fake_az = tmp_path / "az"
+    fake_az.write_text(
+        f"#!{sys.executable}\n"
+        "import json, os, sys\n"
+        "args = sys.argv[1:]\n"
+        "with open(os.environ['FAKE_AZ_CALLS'], 'a') as f: f.write(json.dumps(args) + '\\n')\n"
+        "if args[:2] == ['group', 'exists']: print('true')\n"
+        "if args[:2] == ['acr', 'show'] and '--query' in args: print('testregistry.azurecr.io')\n"
+        "if args[:2] == ['containerapp', 'show']:\n"
+        "    if '--only-show-errors' in args: sys.exit(int(os.environ['FAKE_APP_EXISTS'] == '0'))\n"
+        "    if '--query' in args: print('backend.example.invalid')\n"
+        "    else: print(json.dumps({'properties': {'template': {'containers': [{}], 'revisionSuffix': 'old'}}}))\n"
+        "if args[:3] == ['containerapp', 'revision', 'list']: print('old-revision')\n"
+        "if args[:3] == ['containerapp', 'replica', 'list']: print('0')\n"
+        "if args[:2] == ['containerapp', 'update'] and '--yaml' in args:\n"
+        "    with open(args[args.index('--yaml') + 1]) as f: spec = json.load(f)\n"
+        "    assert 'revisionSuffix' not in spec['properties']['template']\n"
+        "    container = spec['properties']['template']['containers'][0]\n"
+        "    assert container['image'] == 'testregistry.azurecr.io/paiziq-ingest:test'\n"
+        "    env = {item['name']: item for item in container['env']}\n"
+        "    assert env['PAIZIQ_INGEST_KEYS']['secretRef'] == 'ingest-keys'\n"
+        "    assert container['volumeMounts'] == [{'volumeName': 'data', 'mountPath': '/data'}]\n"
+    )
+    fake_az.chmod(0o755)
+    password = secrets.token_urlsafe(32)
+    key = secrets.token_urlsafe(32)
+    env = {
+        **os.environ,
+        "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
+        "FAKE_AZ_CALLS": str(calls_path),
+        "FAKE_APP_EXISTS": "1" if existing_app else "0",
+        "AZ_ACR_NAME": "testregistry",
+        "AZ_STORAGE_ACCOUNT": "teststorage",
+        "AZ_ACR_PULL_USERNAME": "test-pull",
+        "AZ_ACR_PULL_PASSWORD": password,
+        "PAIZIQ_INGEST_KEYS": key,
+        "IMAGE_TAG": "test",
+    }
+    result = subprocess.run(
+        ["bash", str(DEPLOY_SCRIPT), "--skip-build", "--no-smoke"],
+        env=env, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert password not in result.stdout + result.stderr
+    assert key not in result.stdout + result.stderr
+    calls = [json.loads(line) for line in calls_path.read_text().splitlines()]
+    updates = [args for args in calls if args[:2] == ['containerapp', 'update']]
+    assert len(updates) == 1, 'image, environment and volume must be applied in one revision'
+    assert '--yaml' in updates[0]
+    assert not any(args[:2] == ['group', 'create'] for args in calls)
+    registry_call = next(
+        args for args in calls
+        if args[:3] == ['containerapp', 'registry', 'set']
+        or args[:2] == ['containerapp', 'create']
+    )
+    username_flag = '--username' if existing_app else '--registry-username'
+    password_flag = '--password' if existing_app else '--registry-password'
+    assert registry_call[registry_call.index(username_flag) + 1] == 'test-pull'
+    assert registry_call[registry_call.index(password_flag) + 1] == password
+    assert '--registry-identity' not in registry_call
+    if existing_app:
+        deactivation = next(i for i, args in enumerate(calls)
+                            if args[:3] == ['containerapp', 'revision', 'deactivate'])
+        update = next(i for i, args in enumerate(calls)
+                      if args[:2] == ['containerapp', 'update'])
+        stopped = next(i for i, args in enumerate(calls)
+                       if args[:3] == ['containerapp', 'replica', 'list'])
+        assert deactivation < stopped < update
+
+
 def _free_port() -> int:
     import socket
 

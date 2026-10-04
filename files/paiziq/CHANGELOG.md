@@ -9,7 +9,29 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-<<<<<<< Updated upstream
+- 2026-10-04: Resolved Azure deployment PR conflicts against the Phase 0
+  development code, preserving CI and procurement/Phase 0 demo targets.
+  Removed committed conflict markers from the Makefile and documentation;
+  added a regression test that exercises `make help` and checks the targets.
+  The infrastructure deployment script now applies image, environment and
+  volume together after stopping existing writers, avoiding a second revision
+  swap with a running SQLite process. Regression tests verify the combined
+  template, secret references and single update on create/redeploy paths.
+
+- 2026-10-03: Ran and verified the Northstar demo on the Azure dev backend;
+  documented the synthetic payment results, demo environment, report and
+  secure dashboard key location. The approved case uses `MockGateway`.
+
+- 2026-10-03: Optional repository-scoped ACR pull credentials in the Azure
+  deployment script for Contributor accounts without role-assignment rights.
+  Partial credentials are rejected before deployment; redeploys update the
+  registry credential without enabling ACR's admin account.
+  Existing revisions are stopped and confirmed to have no replicas before
+  redeployment to preserve SQLite's
+  single-writer constraint, and volume updates request a fresh revision suffix.
+  Existing resource groups retain their metadata location when backend
+  resources need a different region for capacity.
+
 - 2026-10-03: Root-level SDK CI and automatic Azure backend deployment for
   pushes/merges to `main`, with `make check`, distribution build, container
   smoke and hosted smoke gates. Uses a main-only GitHub OIDC identity and
@@ -18,7 +40,7 @@ adheres to [Semantic Versioning](https://semver.org/).
   Completed CI runs notify contributors/collaborators in a GitHub results
   thread. `main` and `Dev` use the development tree; no main-only files are
   imported. Owner-granted Azure roles are required for backend deployment.
-=======
+
 - 2026-10-04: The procurement agent delivers review and rejection alerts to
   `POST /v1/notifications`, so they appear on the dashboard Alerts screen
   instead of only in the process log.
@@ -31,7 +53,6 @@ adheres to [Semantic Versioning](https://semver.org/).
   runs it against `PAIZIQ_ENDPOINT` using a free OpenAI-compatible model
   (`GROQ_API_KEY`, `OPENROUTER_API_KEY`, or `GEMINI_API_KEY`). No API key is
   stored in the repo. Covered by `tests/test_procurement_agent.py`.
->>>>>>> Stashed changes
 
 - 2026-10-03: Runnable backend deployment package and Azure guide.
   Completed `services/ingest/Dockerfile` (installs the local SDK, runs as a
