@@ -71,6 +71,16 @@ Subscription Contributor cannot create role assignments. Until those grants
 exist, backend quality/build checks run, but Azure deployment fails. After the
 Owner grants access, rerun the failed workflow from Actions.
 
+Verification on 2026-10-03: [SDK CI run](https://github.com/paiziq-admin/Paiziq-sdk/actions/runs/37175728093)
+passed quality, package build and container smoke, then failed Azure login
+with `No subscriptions found` because the identity has no role assignments.
+The backend app was not changed by that run. The
+[dashboard push run](https://github.com/paiziq-admin/Paiziq-Dashboard/actions/runs/37175628199)
+passed quality, Chromium E2E and deployment. Both notification workflows
+completed successfully and mentioned contributors in the
+[SDK results thread](https://github.com/paiziq-admin/Paiziq-sdk/issues/2) and
+[dashboard results thread](https://github.com/paiziq-admin/Paiziq-Dashboard/issues/3).
+
 `notify-ci.yml` reports every completed CI run in a dedicated issue, including
 success, failure and cancellation, and mentions contributors/collaborators.
 Contributor discovery is live; if collaborator enumeration is denied, the
