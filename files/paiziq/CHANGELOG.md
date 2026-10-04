@@ -9,6 +9,20 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- 2026-10-03: Ran and verified the Northstar demo on the Azure dev backend;
+  documented the synthetic payment results, demo environment, report and
+  secure dashboard key location. The approved case uses `MockGateway`.
+
+- 2026-10-03: Optional repository-scoped ACR pull credentials in the Azure
+  deployment script for Contributor accounts without role-assignment rights.
+  Partial credentials are rejected before deployment; redeploys update the
+  registry credential without enabling ACR's admin account.
+  Existing revisions are stopped and confirmed to have no replicas before
+  redeployment to preserve SQLite's
+  single-writer constraint, and volume updates request a fresh revision suffix.
+  Existing resource groups retain their metadata location when backend
+  resources need a different region for capacity.
+
 - 2026-10-03: Runnable backend deployment package and Azure guide.
   Completed `services/ingest/Dockerfile` (installs the local SDK, runs as a
   non-root user, persistent `/data` SQLite volume, health check) with a

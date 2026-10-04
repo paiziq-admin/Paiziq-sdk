@@ -9,13 +9,72 @@ the dashboard. Last updated 2026-10-03.
 | Piece | State | Evidence |
 | --- | --- | --- |
 | Backend container package (`services/ingest/Dockerfile`, `entrypoint.sh`, `.dockerignore`) | Verified locally | `make docker-smoke` builds the image, starts it in production mode, and passes 5/5 smoke checks |
-| Northstar demo runner (`scripts/northstar_demo.py`) | Verified locally | Run against the production-mode container: approved / needs_review / rejected, read-only key issued, CORS preflight allowed |
-| Deployment lane tests (`tests/test_deploy_package.py`) | Passing | 14 tests under `make ingest-test` |
-| Azure deploy script (`deploy/azure/deploy_backend.sh`) | Written, syntax-checked, **not yet executed** | Requires the Azure CLI and subscription access; this machine has neither `az` nor `gh` installed |
+| Northstar demo runner (`scripts/northstar_demo.py`) | Completed against Azure on 2026-10-03 | Three persisted payments, matching decisions and SDK traces; one open review; demo read-only key verified; dashboard CORS allowed |
+| Deployment lane tests (`tests/test_deploy_package.py`) | Passing | 18 tests under `make ingest-test` |
+| Azure deploy script (`deploy/azure/deploy_backend.sh`) | Deployed on 2026-10-03 | Healthy East US 2 Container App; hosted smoke 5/5; trace, agent, SDK key and read key survive a revision restart |
 | Dashboard publish from the `dev` branch | Documented, **not yet performed** | Needs a push to GitHub and a manual workflow dispatch |
 
 Nothing in this guide seeds the static dashboard. The dashboard reads live data
 from the backend; the demo creates that data through the SDK.
+
+### Completed Azure rollout — 2026-10-03
+
+The backend is **online**. API base URL:
+`https://paiziq-ingest-dev.whiteforest-4bca54b1.eastus2.azurecontainerapps.io`.
+[API documentation](https://paiziq-ingest-dev.whiteforest-4bca54b1.eastus2.azurecontainerapps.io/docs)
+and [health check](https://paiziq-ingest-dev.whiteforest-4bca54b1.eastus2.azurecontainerapps.io/health).
+Deployment from SDK `Dev` commit `2f4119a` reached these stages:
+
+| Item | Actual state |
+| --- | --- |
+| Local validation | `make check`: 181 SDK tests, 145 backend tests, 3 examples; container smoke 5/5 on ARM64 and Linux AMD64 |
+| Registry | `paiziqdevacr8406cce0` (Basic, Central US); admin and anonymous pull disabled |
+| Uploaded image | `paiziqdevacr8406cce0.azurecr.io/paiziq-ingest:2f4119a-azure1` |
+| Image manifest digest | `sha256:69d505b411bac64250e6f488cf907c9826b670d1069d6887b5bbd1d1b7866130` |
+| Database storage | `paiziqdevdata8406cce02`, East US 2, Standard LRS; 5 GiB quota share `paiziq-ingest-data` |
+| Failed environment | `paiziq-dev-env`, Central US; create failed with `AKSCapacityHeavyUsage`; deleted after Azure background cleanup |
+| Replacement environment | `paiziq-dev-env-eastus2`, East US 2; `Succeeded` |
+| Backend app | `paiziq-ingest-dev`; `Succeeded`, one healthy active revision, one replica, one worker; 0.5 vCPU / 1 GiB |
+| Subscription policy | `FreeTrial_2014-09-01`, spending limit `On`; Azure enforces one Container Apps environment globally |
+| Credentials | Bootstrap, Fernet, repository-only ACR pull, SDK developer and dashboard read-only keys saved in gitignored `deploy/azure/backend.env` with mode `0600`; no keys in this guide |
+| Application records | Organization `org_63703cd5efff6f0db7b5` (`Paiziq`), environment `env_d0f615f491e11933fbed` (`dev`, sandbox), agent `agt_6c16810c442e0e12cedf` (`payment-agent-dev`) |
+| Hosted verification | Smoke 5/5; managed SDK key trace ingest accepted; read key retrieves trace; restart preserves records and keys; Swagger/OpenAPI reachable |
+
+ACR Tasks are disabled for this subscription (`TasksOperationsNotAllowed`), so
+the image was built and tested locally for Linux AMD64, then pushed with a
+short-lived Azure login token. The account has Contributor access and cannot
+grant `AcrPull`; the registry credential has only content/metadata read access
+to `paiziq-ingest`. The empty Central US storage account from the first attempt
+was removed; the existing dashboard is unaffected.
+
+The image is already uploaded. To redeploy it with the local configuration:
+
+```bash
+cd files/paiziq
+set -a; source deploy/azure/backend.env; set +a
+./deploy/azure/deploy_backend.sh --skip-build
+```
+
+The replacement uses Consumption with no additional Log Analytics workspace.
+The failed Central US environment briefly blocked deployment because this
+subscription allows only one environment globally. Cleanup completed and the
+East US 2 create was accepted. Do not delete `paiziq-dev`: it contains the
+deployed dashboard and prepared backend assets.
+
+Connection settings in the local `backend.env`:
+
+- `PAIZIQ_ENDPOINT`: live backend origin, not the static dashboard origin.
+- `PAIZIQ_API_KEY`: managed `developer` key for SDK ingest/read.
+- `PAIZIQ_READ_KEY`: managed `read_only` key for dashboard reads.
+- `PAIZIQ_CONTROL_ENV_ID` / `PAIZIQ_CONTROL_AGENT_ID`: saved dev record IDs.
+
+The bootstrap key remains in `PAIZIQ_INGEST_KEYS` for server administration.
+Do not give it to the browser. No reviewer key was issued. The Northstar demo
+subsequently created three synthetic payments and executed one with the SDK's
+`MockGateway`; no real gateway was charged. The deployed dashboard's
+frontend integration/publish step is still separate; only its CORS origin
+was enabled on the API. The deployment-script fixes and rollout notes are
+included with the regression tests in this change.
 
 ## 2. Topology
 
@@ -172,6 +231,37 @@ Keep the bootstrap key in your password manager. It is an admin credential and
 should never be typed into a browser; the demo issues a separate read-only key
 for the dashboard.
 
+The default managed-identity path needs permission to grant `AcrPull` on the
+registry. Subscription `Contributor` alone cannot create role assignments.
+For a development deployment with that role, create an ACR token with only
+`content/read` and `metadata/read` on the `paiziq-ingest` repository and set
+both `AZ_ACR_PULL_USERNAME` and `AZ_ACR_PULL_PASSWORD` in the gitignored
+`backend.env`. The deployment script stores the password as a Container Apps
+registry secret. Do not enable the registry admin account or anonymous pull.
+Use managed identity when role-assignment permission becomes available.
+
+If `az acr build` returns `TasksOperationsNotAllowed`, build and test locally,
+then push with your Azure login and deploy with `--skip-build`. On Apple
+Silicon, select Linux AMD64 for Container Apps:
+
+```bash
+set -a; source deploy/azure/backend.env; set +a
+export DOCKER_DEFAULT_PLATFORM=linux/amd64
+make docker-smoke DOCKER_IMAGE="$AZ_ACR_NAME.azurecr.io/paiziq-ingest:$IMAGE_TAG" \
+  PAIZIQ_CORS_ORIGINS="$PAIZIQ_CORS_ORIGINS"
+az acr login --name "$AZ_ACR_NAME"
+docker push "$AZ_ACR_NAME.azurecr.io/paiziq-ingest:$IMAGE_TAG"
+./deploy/azure/deploy_backend.sh --skip-build
+```
+
+Set `IMAGE_TAG` explicitly in `backend.env` when using this fallback. The
+registry remains private; cloud build permission is not required.
+
+For a regional capacity error, keep the existing resource group and change
+`AZ_LOCATION` to an available US region. Create both the Container Apps
+environment and the database file share in that region. The resource group's
+metadata location does not restrict the locations of its resources.
+
 ### 5.3 Verify independently
 
 ```bash
@@ -274,10 +364,34 @@ swap the scenario module; the runner, key issuance, and report are unchanged.
 
 ### 7.1 Run it against the deployed backend
 
+The Azure demo was run successfully on 2026-10-03 with `make northstar-demo`:
+
+| Demo setting | Verified value |
+| --- | --- |
+| Organization | `e2e-org-062b161c` (`org_ba4d66545374463738f8`) |
+| Environment | `e2e-sandbox`, `env_58c32600eb950cadd320` |
+| Agent | `e2e-payment-agent`, `agt_31ccd5e693df1ee0d885` |
+| Policy | `e2e-threshold-policy` v1 |
+| Acme payment | `pay_001af9dc6d43f30e4140`: 49.99 USD, approved/executed by `MockGateway` |
+| CloudHost payment | `pay_70ee4ad4bf3ffbe99514`: 180.00 USD, needs review; one open review |
+| Shady payment | `pay_7b0badd0110ae81c4173`: 20.00 USD, rejected |
+| Report | `.e2e/northstar-run.json` (no secrets) |
+| Demo dashboard connection | `.e2e/northstar.env`, mode `0600`, gitignored; `PAIZIQ_READ_KEY` is the demo's own read-only key |
+
+All three payments, persisted decisions, policy versions, and SDK traces were
+independently read back from the hosted API with the demo key. The demo is a
+one-time seed/run, not a continuously running server; its results remain in
+the Azure database. Use the demo organization/environment when viewing them
+after publishing the dashboard's live frontend. The existing `Paiziq` / `dev`
+environment from backend setup is separate and does not contain these rows.
+
+To run another fresh demo, use an admin credential because the runner creates
+and publishes a policy and issues an API key:
+
 ```bash
 cd files/paiziq
-export PAIZIQ_ENDPOINT='https://<backend fqdn>'
-export PAIZIQ_API_KEY='<bootstrap admin key>'
+set -a; source deploy/azure/backend.env; set +a
+export PAIZIQ_API_KEY="${PAIZIQ_INGEST_KEYS%%,*}"
 make northstar-demo PAIZIQ_DASHBOARD_URL=https://brave-river-0a6dd1310.5.azurestaticapps.net
 ```
 
@@ -351,10 +465,12 @@ set -a; source deploy/azure/backend.env; set +a
 make deploy-azure                # builds :<git sha>, updates the app, re-runs smoke
 ```
 
-Container Apps creates a new revision; the old one is deactivated once the
-new one is healthy. During that overlap two processes may briefly share the
-SQLite file — accepted for the development tier because `nobrl` plus SQLite's
-own locking serialises writers, but avoid deploying while the demo is writing.
+The script deactivates existing revisions and waits until their replicas have
+stopped before replacing the image. Expect
+a short outage on redeployment. `nobrl` disables server byte-range locking;
+it does not make SQLite safe for simultaneous writers in separate processes.
+Keep one replica, one worker, and one active revision. Volume updates remove
+the exported revision suffix so Azure can assign a fresh immutable revision.
 
 ### Rotate the bootstrap key
 
@@ -408,13 +524,13 @@ Or `IMAGE_TAG=<previous sha> ./deploy/azure/deploy_backend.sh --skip-build`.
 
 - **Northstar demo** = the deterministic three-payment scenario from the E2E
   suite run by the real SDK (see §7). Confirm or replace the scenario.
-- The Azure CLI steps were not executed from the authoring machine (no `az`
-  installed); the script is syntax-checked and its spec-patching code is unit
-  tested, but the first real run should be watched end to end.
+- The Azure CLI rollout completed on 2026-10-03; see the live status in §1.
+  Hosted smoke and restart-persistence checks passed. This is a dev deployment,
+  not the managed multi-tenant production persistence/queue topology.
 - The dashboard merge/dispatch (§6) is documented, not performed; it touches a
   GitHub repository and should be done by an operator with push rights.
 - SQLite on Azure Files is a development-tier arrangement: single replica, no
-  horizontal scaling, and a short dual-process window during revision swaps.
+  horizontal scaling, and a short outage during revision swaps.
   The Phase 1 tracker still lists the Terraform/RDS path for production.
 - `POST /v1/orgs` currently accepts any valid key (not admin-gated). The
   read-only dashboard key therefore can create organizations; it cannot mint
