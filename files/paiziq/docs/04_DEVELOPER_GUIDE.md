@@ -147,6 +147,98 @@ curl -s -X POST http://127.0.0.1:8800/v1/traces \
   -d '{"spans": [{"name": "paiziq.review_payment", "trace_id": "tr1", "span_id": "s1"}]}'
 ```
 
+### Execution authority and recovery (SDK 0.3.0)
+
+Select one execution authority for all workers that share a budget. The
+default ledger is in memory. Use a SQLite file to keep local claims and
+reviews across a restart:
+
+```python
+from paiziq import PaiziqSDK, PaymentPolicy, SQLiteExecutionLedger
+
+ledger = SQLiteExecutionLedger("payments.sqlite")
+sdk = PaiziqSDK(
+    policy=PaymentPolicy(daily_budget=100),
+    execution_ledger=ledger, org_id="local-org", env_id="sandbox",
+)
+```
+
+For hosted execution, use registered organization/environment/agent IDs and
+the environment's published policy. Local SDK rules can add restrictions.
+The server performs the final authorization and budget reservation:
+
+```python
+import os
+from paiziq import HostedExecutionLedger, PaiziqSDK, SyncHTTPTransport
+
+org_id, env_id = os.environ["PAIZIQ_ORG_ID"], os.environ["PAIZIQ_ENV_ID"]
+transport = SyncHTTPTransport(
+    os.environ["PAIZIQ_ENDPOINT"], api_key=os.environ["PAIZIQ_API_KEY"],
+)
+sdk = PaiziqSDK(
+    execution_ledger=HostedExecutionLedger(transport, org_id=org_id, env_id=env_id),
+    org_id=org_id, env_id=env_id,
+)
+```
+
+The example uses the default mock gateway. Supply a tested provider adapter
+for real execution. The trace `dashboard_endpoint` does not select an
+execution authority. A hosted service without the new execution API fails
+closed. Use a key with read and ingest access for execution; use an admin
+credential for hosted reconciliation. Local `approve_review()` does not
+approve a separate hosted review. Resolve a hosted hold through the review API.
+
+Keep one `PaymentRequest.request_id` for one logical action, including retries
+after a timeout or restart. Do not create a new ID to retry an unknown result.
+Any change to the payment payload needs a new review; reusing an executed ID
+with changed data fails. Local review approval expires after 15 minutes by
+default (`review_ttl_ms`). Policies and mandates are checked again before
+execution. Unresolved reservations remain held after authorization expires.
+
+Use `result.status` to distinguish `blocked`, `reserved`, `submitted`,
+`confirmed`, `failed`, and `unknown`. `replayed` means the original record was
+returned. `accounting_pending=True` means the SDK knows the provider result
+but could not confirm its ledger write. Never interpret that as permission
+to charge again. Call `sdk.reconcile_payment(request_id)` with a gateway that
+implements receipt lookup. An operator may supply `GatewayOutcome` only from
+trusted provider evidence. An unused `reserved` claim can be cancelled with
+evidence of no charge. Unknown evidence does not release funds.
+
+`get_execution_events()` reads local durable evidence. In hosted mode, read
+`GET /v1/payments/{payment_id}/execution` for authoritative server events;
+the SDK's separate local review evidence defaults to memory. Supply a file
+`evidence_ledger` if those additional local reviews must survive a restart.
+The optional legacy `BudgetTracker` contributes USD-only historical spend;
+it is not the atomic execution authority. Use a shared execution ledger for
+all new writes. Separate currencies have separate budget totals; there is no
+implicit FX conversion.
+
+The duplicate-execution and reservation guarantees apply to
+`execute_payment()` and the hosted claim/report protocol. The generic tool,
+LangChain and OpenAI review wrappers check policy only. A wrapped function
+that charges outside the managed execution path does not get these execution
+guarantees. Route its payment side effect through `execute_payment()`.
+
+Execution does not mutate the `Decision` returned by an earlier review.
+Read execution events or the hosted evidence API for the subsequent audit
+and provider result. Historical sub-cent spend is imported without rounding;
+new payment claims enforce currency minor-unit precision.
+
+Run the full-stack mock demo against a local service:
+
+```bash
+make e2e-stack
+# In a second terminal:
+make phase0-demo
+```
+
+The demo creates an isolated sandbox organization and emits JSON IDs for a
+confirmed payment, an unknown payment, and a budget-blocked payment. The
+dashboard service browser test consumes those IDs and reads the real API.
+The deployment sequence is server migrations/API, SDK clients, then dashboard.
+Historical external reports remain unverified. Phase 0 does not add scores,
+economic checks, compute adapters or outcome verification.
+
 ## 8. The paiziq CLI
 
 The SDK ships a stdlib-only CLI (`paiziq`, installed with the package;

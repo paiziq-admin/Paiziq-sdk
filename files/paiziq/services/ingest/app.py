@@ -21,6 +21,7 @@ from routers import (
     agents,
     audit,
     decisions,
+    executions,
     keys,
     metrics,
     orgs,
@@ -70,7 +71,7 @@ if settings.cors_origins:
         CORSMiddleware,
         allow_origins=sorted(settings.cors_origins),
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
+        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "Idempotency-Mode"],
     )
 
 
@@ -94,6 +95,7 @@ app.include_router(agents.router)
 app.include_router(keys.router)
 app.include_router(payments.router)
 app.include_router(decisions.router)
+app.include_router(executions.router)
 app.include_router(reviews.router)
 app.include_router(policies.router)
 app.include_router(webhooks.router)

@@ -101,6 +101,8 @@ def _scoped_secret(allowed: frozenset[str]) -> Callable[..., str]:
 
 
 require_api_key = _scoped_secret(frozenset({"ingest", "read", "admin", "review"}))
+require_ingest_context = _scoped_context(frozenset({"ingest", "admin"}))
+require_admin_context = _scoped_context(frozenset({"admin"}))
 require_ingest_key = _scoped_secret(frozenset({"ingest", "admin"}))
 require_read_key = _scoped_secret(frozenset({"read", "admin", "review"}))
 require_read_context = _scoped_context(frozenset({"read", "admin", "review"}))

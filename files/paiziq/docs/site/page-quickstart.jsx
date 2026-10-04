@@ -89,6 +89,27 @@ elif decision.status is DecisionStatus.REJECTED:
 
 trail = sdk.get_audit_trail(request.request_id)
 sdk.shutdown()   # flush exporters on exit`} />
+      <H2 id="authority" n="05">Choose durable execution</H2>
+      <p>
+        The quickstart uses an in-memory ledger. Use a shared SQLite file for local restart
+        durability, or the explicit hosted adapter for the server's policy and budget authority.
+        A dashboard endpoint sends traces only.
+      </p>
+      <CodeBlock file="durable.py" lang="python" code={
+`from paiziq import PaiziqSDK, PaymentPolicy, SQLiteExecutionLedger
+
+sdk = PaiziqSDK(
+    policy=PaymentPolicy(daily_budget=100),
+    execution_ledger=SQLiteExecutionLedger("payments.sqlite"),
+    org_id="example-org", env_id="sandbox",
+)`} />
+      <Callout type="warn">
+        Keep one request ID per logical action. A repeated execution returns its original
+        record. An unknown result keeps the budget reservation. Use
+        <code> reconcile_payment(request_id)</code> to check a provider receipt; do not send a
+        new charge. A local approval expires after 15 minutes by default. Changes to the request
+        or policy require a new review.
+      </Callout>
       <p>
         That's the full loop. Next, set up <a className="link" href="#/authentication">keys and
         environments</a> and learn <a className="link" href="#/concepts">how a decision is built</a>.

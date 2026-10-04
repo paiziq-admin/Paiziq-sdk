@@ -12,6 +12,7 @@ from event_router import EventRouter
 from retention import RetentionJob
 from stores.agents import AgentStore
 from stores.decisions import DecisionStore, ReviewStore
+from stores.executions import ExecutionStore
 from stores.keys import KeyStore
 from stores.metrics import MetricsStore
 from stores.orgs import OrgStore
@@ -33,12 +34,13 @@ _metrics_store: Optional[MetricsStore] = None
 _event_router: Optional[EventRouter] = None
 _retention_job: Optional[RetentionJob] = None
 _audit_log: Optional[AuditLog] = None
+_execution_store: Optional[ExecutionStore] = None
 
 
 def init_stores(conn: sqlite3.Connection, lock: threading.Lock, settings: Settings) -> None:
     global _conn, _lock, _org_store, _agent_store, _key_store, _payment_store, _audit_log
     global _decision_store, _review_store, _policy_store, _webhook_store, _metrics_store
-    global _event_router, _retention_job
+    global _event_router, _retention_job, _execution_store
     _conn, _lock = conn, lock
     _org_store = OrgStore(conn, lock)
     _agent_store = AgentStore(conn, lock)
@@ -57,6 +59,7 @@ def init_stores(conn: sqlite3.Connection, lock: threading.Lock, settings: Settin
         settings.retention_audit_days,
     )
     _audit_log = AuditLog(conn, lock)
+    _execution_store = ExecutionStore(conn, lock)
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -127,3 +130,8 @@ def get_retention_job() -> RetentionJob:
 def get_audit_log() -> AuditLog:
     assert _audit_log is not None, "init_stores() not called"
     return _audit_log
+
+
+def get_execution_store() -> ExecutionStore:
+    assert _execution_store is not None, "init_stores() not called"
+    return _execution_store

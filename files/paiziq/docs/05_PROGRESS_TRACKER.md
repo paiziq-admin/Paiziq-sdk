@@ -4,9 +4,69 @@ Human-readable implementation status against
 `03_BUILD_DEPLOY_PLAN.md`. Update this file in the same PR as the
 change it describes (see `04_DEVELOPER_GUIDE.md`, section 3).
 
-**Last updated:** 2026-10-03 · **Current version:** 0.2.0
+**Last updated:** 2026-10-04 · **Current version:** 0.3.0
 
 Legend: ✅ done · 🔄 in progress · ⬜ not started
+
+## Site parity — Phase 0 execution and evidence foundation ✅
+
+Completed locally on 2026-10-04 in SDK 0.3.0, the ingest service, and the
+companion dashboard. Three implementation agents worked in parallel on the
+SDK, backend and frontend. The root agent integrated the hosted adapter,
+reviewed cross-component behavior, and ran the final backend gate. This
+workstream is distinct from the historical production scaffold below.
+
+| ID | Area | To-do | Status | Owner / evidence |
+| --- | --- | --- | --- | --- |
+| SP0-01 | Design | Agree ledger, gateway, HTTP and UI contracts | ✅ | Root + three agents; shared SQLite algorithm and explicit authority |
+| SP0-02 | SDK/backend | Atomic scoped, currency-aware reservations and execution claims | ✅ | SDK; concurrent duplicate, warning-band and two-$60/$100 regressions |
+| SP0-03 | SDK/backend | Immutable request, policy and review evidence; revalidate before execution | ✅ | SDK + backend; full-payload change, stale approval, policy and mandate expiry tests |
+| SP0-04 | SDK | Idempotent provider seam; unknown outcomes and receipt reconciliation | ✅ | SDK; timeout, restart, lost response and accounting failure tests |
+| SP0-05 | Backend | Hosted decisions use shared committed and reserved history | ✅ | Backend; exact budget, velocity, currency and historical-spend tests |
+| SP0-06 | Backend | Durable events and outbox; idempotent publication | ✅ | SDK + backend; transaction, restart, immutable SQL evidence and publication replay tests |
+| SP0-07 | Backend | Scoped idempotency, authorization and managed-execution transition guards | ✅ | Backend; scope, conflict, token, legacy bypass and webhook evidence access tests |
+| SP0-08 | Full stack | SDK hosted execution adapter uses one authoritative ledger | ✅ | Root; 10 real HTTP SDK tests with mock providers |
+| SP0-09 | Frontend | Execution status, reserved exposure and immutable evidence panel | ✅ | Frontend; API/component tests and live-service workflow |
+| SP0-10 | Frontend | Remove unsupported manual execution claims; show unknown and unavailable states | ✅ | Frontend; legacy unverified state, 404/403/429 and no retry control |
+| SP0-11 | Full stack | OpenAPI, generated types, migrations and compatibility | ✅ | Backend; migrations 0009–0011, schema-8 upgrade and generated-contract checks |
+| SP0-12 | Verification | Backend quality gate and full-stack service/browser workflow | ✅ | Root + agents; 228 SDK + 170 ingest tests, 3 examples, 2 live-service browser workflows |
+| SP0-13 | Verification | Frontend gate, themes, responsive layouts and error states | ✅ | Frontend; 24 tests, 8 fixture browser workflows, light/dark and 320/390/900/1440px checks |
+| SP0-14 | Documentation | Plan, tracker, changelog, guides and final plain-English explanation | ✅ | Root + frontend; guides, contracts, docs site, generated dashboard docs and browser proof |
+
+Acceptance evidence: repeated or concurrent logical execution causes one
+mock provider invocation through the managed path. Two preapproved $60
+requests cannot spend $120 against a $100 budget. Unknown results keep their
+reservation across a restart and beyond budget-window expiry. The live
+browser run showed $40 committed, $20 reserved, and a blocked new $50 request.
+
+Proof: [dashboard run report](../../../../Paiziq-Dashboard/docs/phase0-evidence/phase0-workflow.json),
+[execution screenshot](../../../../Paiziq-Dashboard/docs/phase0-evidence/phase0-unknown-execution.png),
+and [frontend tracker](../../../../Paiziq-Dashboard/docs/implementation-status.md).
+
+### Completion explanation — simplified technical English
+
+The SDK reserves money before it sends a payment. A repeated request uses the
+existing execution record. It does not send another payment. The backend
+checks the current policy, budget and authorization before submission.
+
+An unknown provider result keeps the reservation. The operator must check
+the provider record before the service releases that reservation. A failure
+to save a confirmed result does not change the payment to a failed payment.
+
+The dashboard shows the execution state, reserved amount and recorded
+evidence. It identifies old external reports as unverified. It does not
+provide a button that declares payment success.
+
+Use a shared SQLite file or the hosted adapter for persistent execution
+control. The default local database is in memory. The execution guarantee
+applies to `execute_payment()` and the hosted claim/report protocol.
+Review-only framework wrappers must use this path for the actual charge.
+Provider evidence comes from a trusted executor or operator. A provider
+without idempotency and receipt lookup cannot provide a general exactly-once
+guarantee. This phase used mock providers. No production deployment occurred.
+
+Scores, economic checks, compute spend and outcome checks remain in later
+phases. Phase 0 supplies the execution and evidence foundation for that work.
 
 ## Phase 0 — Production Scaffold (v0.1.0) ✅
 
@@ -56,8 +116,10 @@ Legend: ✅ done · 🔄 in progress · ⬜ not started
 | Item | Status | Where / Notes |
 | --- | --- | --- |
 | Payment-agent full-stack E2E suite and tutorial | ✅ | `docs/e2e/`, `tests/e2e_support/`, Make E2E commands, dashboard fixture/service lanes |
-| Backend deployment package (container, Azure Container Apps script, smoke test, Northstar demo runner) and deployment guide | ✅ package · ✅ Azure dev backend and Northstar demo | `services/ingest/Dockerfile`, `entrypoint.sh`, `deploy/azure/`, `scripts/smoke_backend.py`, `scripts/northstar_demo.py`, `docs/deploy/AZURE_DEPLOYMENT_GUIDE.md`; `paiziq-ingest-dev` healthy in East US 2; persistent database and restart checks passed; hosted Northstar demo completed and verified; live frontend publish not performed |
+| Backend deployment package (container, Azure Container Apps script, smoke test, Northstar demo runner) and deployment guide | ✅ package · 🔄 Azure subscription suspension | `services/ingest/Dockerfile`, `entrypoint.sh`, `deploy/azure/`, `scripts/smoke_backend.py`, `scripts/northstar_demo.py`, `docs/deploy/AZURE_DEPLOYMENT_GUIDE.md`; backend and hosted demo verified 2026-10-03; on 2026-10-04 subscription state `Warned`, Container Apps reports `ManagedClusterSuspended`; Owner action required; dashboard live frontend published |
+| LangChain procurement agent (catalog purchases through PaiziqSDK, published policy, dashboard trace) | ✅ | `sdk/examples/procurement_agent.py`, `make procurement-demo`; live hosted-LLM run still needs an operator-supplied free-tier key |
 | Project rules for collaborators/agents | ✅ | `.cursor/rules/`, `AGENTS.md` |
+| Main-branch Azure CI and contributor notifications | ✅ CI/notifications · 🔄 backend role grants | Root `.github/workflows/ci.yml`, `notify-ci.yml`; hosted SDK quality/build/container smoke passed, failure notification delivered; dashboard quality/E2E/deploy and success notification passed; Azure Owner must grant app Contributor and registry AcrPush to the deployment identity |
 | Developer documentation site (design handoff) | ✅ | `docs/site/` — serve with `python3 -m http.server` |
 
 **Phase 1 exit criteria:** CI green ✅ · versioned installable package ✅
@@ -198,3 +260,14 @@ capability is shipped.
 | 2026-10-03 | unreleased | Completed Azure dev backend rollout: `paiziq-ingest-dev`, East US 2; hosted smoke, managed-key trace ingestion/read, org/env/agent setup, revision restart, Swagger/OpenAPI | smoke 5/5; original trace, agent and SDK/read keys persist after restart; one healthy active revision/replica; no gateway execution |
 | 2026-10-03 | unreleased | `make northstar-demo` against Azure; independent API readback with issued demo read-only key | approved/executed (MockGateway), needs_review, rejected; 3 payment/decision/SDK trace sets verified, policy v1, 1 open review, dashboard CORS allowed; report secret-free and read key saved to gitignored `.e2e/northstar.env` |
 | 2026-10-03 | unreleased | Final Northstar documentation gate: `make check` (181 SDK + 145 ingest tests, 3 examples); diff and credential exclusion checks | all passed; demo report and credentials remain gitignored |
+| 2026-10-03 | unreleased | Main CI setup: `make check build` (181 SDK + 145 ingest tests, 3 examples, sdist/wheel); Linux AMD64 `make docker-smoke`; hosted credential-free `make ci-smoke`; actionlint for both repositories; dashboard quality and browser gates | all local gates passed; container smoke 5/5, hosted CI smoke 4/4, dashboard 11 unit + 6 Chromium tests; OIDC identity created, Owner role assignments pending |
+| 2026-10-03 | unreleased | GitHub-hosted CI: SDK run `37175728093`, dashboard push run `37175628199`; contributor notifications; both repositories' development/main ref equality | SDK quality/build/container smoke passed; Azure OIDC login blocked by missing role assignments (`No subscriptions found`); dashboard deployed successfully; SDK failure and dashboard success notifications posted to issues #2/#3; earlier SDK PR #1 remains open/unmerged |
+| 2026-10-04 | unreleased | LangChain procurement agent: `make check` (181 SDK + 143 ingest tests incl. 2 procurement-agent tests, 3 examples); targeted Ruff on the example and test | all passed |
+| 2026-10-04 | unreleased | Procurement alerts: `make check` (181 SDK + 144 ingest tests, 3 examples); review and rejection notifications posted to the deployed backend for the live Groq run | all passed |
+| 2026-10-04 | 0.3.0 | Phase 0 first full `make check`: SDK/service tests passed; happy-path example expected mutation of an immutable review | failed example; fixed by reading persisted execution evidence |
+| 2026-10-04 | 0.3.0 | Final Phase 0 `make check`: Ruff, 228 SDK tests, 170 ingest tests, generated contracts, 3 runnable examples | all passed; 2 dependency deprecation warnings |
+| 2026-10-04 | 0.3.0 | `make typecheck build`: 27 source files; sdist and wheel | all passed |
+| 2026-10-04 | 0.3.0 | Dashboard `npm run check` (24 tests, lint, types, build, docs), 8 fixture browser workflows, 2 real-service browser workflows | all passed; responsive light/dark evidence saved |
+| 2026-10-04 | 0.3.0 | Docs site: all 15 JSX files parsed; API/quickstart/concepts/recipes/changelog browser review | passed; no JS runtime errors; existing favicon 404/Babel development warning |
+| 2026-10-04 | 0.3.0 | Built wheel smoke with site packages disabled (`python3 -S`): stdlib imports, managed execution and repeated-ID replay; both repository diff checks | passed; one mock provider call |
+| 2026-10-04 | 0.3.0 | PR #1 conflict resolution and combined deployment template: `make check typecheck build` (228 SDK + 179 ingest tests, 3 examples, 27 typed source files, wheel/sdist); Linux AMD64 container smoke; Makefile target regression, actionlint, shell syntax and diff checks | all local gates passed; container smoke 5/5; hosted verification blocked by subscription `Warned` / `ManagedClusterSuspended` and missing CI identity roles |

@@ -277,6 +277,66 @@ When a `needs_review` payment still has an open review, the generic
 transition endpoint rejects `approved` / `rejected` with `409
 review_resolution_required`; callers must use §9.
 
+### 7.1 Execution foundation (SDK 0.3.0)
+
+Payment creation also accepts `category`, `mandate`, and `metadata` and returns
+them on reads. Amounts must be positive, finite and valid for the currency's
+minor-unit precision. `GET /v1/payments` adds an exact `request_id` filter.
+Managed API keys cannot create, read, decide or execute payments outside
+their environment.
+
+Add `Idempotency-Mode: scoped` with `Idempotency-Key` to bind a key to the
+environment and complete payment payload. Repeating the payload returns the
+original payment; a changed payload returns `409 idempotency_conflict`.
+Omitting the mode preserves legacy replay behavior. A key may never expose
+a payment from another environment.
+
+| Endpoint | Scope and behavior |
+| --- | --- |
+| `GET /v1/payments/{id}/execution` | Read: authoritative record, reservation, scoped budget, frozen snapshots and newest event history |
+| `POST /v1/payments/{id}/execution/claim` | Ingest: re-evaluate published policy, check matching human approval, run four-way audit, atomically reserve and claim |
+| `POST /v1/payments/{id}/execution/report` | Ingest: executor identity plus claim token; submit or report a provider outcome |
+| `POST /v1/payments/{id}/execution/reconcile` | Admin: resolve uncertainty or cancel an unused claim with evidence and reason |
+
+Claim accepts an optional SHA-256 `request_digest`. It returns
+`{record, acquired, reason, claim_token}`. Only the first successful claimant
+receives a token. A replay returns the record with `acquired:false`; it never
+grants a second provider call. Policy denial persists a decision, context and
+any required review, with `acquired:false`, `record:null`, and a reason.
+Tokens stay outside event history and snapshots. Claim expiry is 15 minutes;
+submission rechecks the policy, request and mandate. Expiry holds the
+reservation until an authorized reconciliation confirms no charge.
+
+Report accepts `{claim_token, status, gateway_reference?, error?, evidence}`.
+Status is `submitted`, `confirmed`, `failed`, or `unknown`. Terminal reports
+need nonempty evidence; confirmation needs a provider reference. An unknown
+execution requires reconciliation for a terminal result. Reconcile accepts
+`{status, gateway_reference?, error?, evidence, reason}`, where status is
+`confirmed`, `failed`, or `unknown`. A reserved execution can only be cancelled
+as failed with evidence of no charge. Evidence is an authenticated executor or
+operator assertion; this service does not contact a financial provider.
+
+Evidence reads return `record` (nullable), `execution` (display projection),
+`reservation`, `budget`, `request_snapshot`, `policy_snapshot`, and `events`.
+Budget monetary values are decimal strings and include committed/reserved
+amounts, limits, scope, currency and `as_of_ms`. Daily/monthly windows are
+rolling 24 hours/30 days. Unresolved reservations count regardless of age.
+Event entries include `id`, `type`, `at_ms`, `actor`, and `payload`; at most
+the newest 1,000 are returned in ascending order. `events_limit`,
+`events_total`, and `events_truncated` describe that boundary.
+
+Managed payment terminal states must come from the execution APIs. The
+legacy transition endpoint cannot mark a managed execution successful or
+failed. Legacy external success reports are policy-checked, conservatively
+included in budget history, and shown as unverified by the dashboard. They
+do not create managed provider evidence. Schema migrations 0009–0011 add
+these records without rewriting old payment or audit history.
+
+Managed keys are also confined to their environment for webhook endpoints
+and deliveries. A delivery ID or endpoint filter cannot expose another
+environment's execution evidence. Bootstrap administrator keys retain their
+unscoped behavior.
+
 ## 8. Decisions (PZ-017)
 
 | Endpoint | Status |
@@ -291,6 +351,11 @@ SDK engine (allow / review / block outcomes map to the SDK verdicts
 `approved` / `needs_review` / `rejected`). Evaluating also applies the
 corresponding payment state transition and, for `needs_review`, opens a
 review (§9).
+
+Since SDK 0.3.0, hosted evaluation reads shared committed spend and unresolved
+reservations, including velocity. Decision context records the request and
+policy digests and evaluation evidence. An earlier approval does not reserve
+capacity; the execution claim performs the final atomic budget check.
 
 Decision:
 

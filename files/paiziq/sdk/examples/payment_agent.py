@@ -5,10 +5,10 @@ failure handling and telemetry export are all delegated to the SDK.
 Runs fully offline: the span exporter ships batches through the retrying
 `SyncHTTPTransport` (PZ-033) against an in-memory HTTP endpoint; an
 engine outage demonstrates the safe failure modes (PZ-035); duplicate
-submissions trip the velocity guard and a flaky gateway shows failed
-executions committing no spend (PZ-045).
+submissions return the recorded execution, new actions trip the velocity
+guard, and a lost gateway response requires receipt reconciliation.
 
-    python examples/payment_agent.py
+    python3 examples/payment_agent.py
 """
 
 import io
@@ -27,6 +27,7 @@ from paiziq import (
     verify_webhook_signature,
 )
 from paiziq.tracing.tracer import HTTPExporter
+from paiziq.audit import MockGateway
 
 
 # ── an in-memory dashboard endpoint (keeps the example offline) ──────────────
@@ -137,53 +138,55 @@ assert decision.status.value == "needs_review"
 assert decision.reasons[0] == "failure_mode:review_required"
 sdk.engine = healthy_engine
 
-# 5. Duplicate submission → the velocity guard flags the repeat for review.
+# 5. Repeat the logical request safely; a new request is subject to velocity.
 dup_sdk = PaiziqSDK(
     policy=PaymentPolicy(
         review_threshold=100.0,
         hard_limit=1000.0,
         known_merchants={"acme corp"},
-        max_tx_per_hour=1,  # duplicates of an executed payment get flagged
+        max_tx_per_hour=1,  # further distinct requests require review
     ),
     service_name="test-payment-agent",
     exporters=[],
 )
 first = propose("acme corp", 15.0, "Monthly Acme add-on")
-assert dup_sdk.execute_payment(first).executed
-duplicate = propose("acme corp", 15.0, "Monthly Acme add-on")  # same proposal again
+first_result = dup_sdk.execute_payment(first)
+assert first_result.executed
+repeated = dup_sdk.execute_payment(first)
+assert repeated.executed and repeated.replayed
+assert repeated.gateway_reference == first_result.gateway_reference
+assert len(dup_sdk.gateway.charges) == 1
+duplicate = propose("acme corp", 15.0, "Monthly Acme add-on")  # a new logical action
 decision = dup_sdk.review_payment(duplicate)
 print(f"[duplicate] verdict={decision.status.value} flags={[f.value for f in decision.risk_flags]}")
 assert decision.status.value == "needs_review"
 assert "velocity_anomaly" in [f.value for f in decision.risk_flags]
 
-# 6. Gateway outage → execution fails safely (no spend committed), retry succeeds.
-class FlakyGateway:
+# 6. A gateway accepts the charge, then its response is lost. Do not retry.
+class FlakyGateway(MockGateway):
     name = "flaky-mock"
 
-    def __init__(self) -> None:
-        self.charges: list[PaymentRequest] = []
-        self._failed_once = False
-
-    def charge(self, request: PaymentRequest) -> str:
-        if not self._failed_once:
-            self._failed_once = True
-            raise RuntimeError("card network timeout")
-        self.charges.append(request)
-        return f"flaky_{request.request_id[:8]}"
+    def charge_idempotent(self, request: PaymentRequest, idempotency_key: str) -> str:
+        super().charge_idempotent(request, idempotency_key)
+        raise TimeoutError("card network timeout after provider accepted")
 
 
 healthy_gateway, sdk.gateway = sdk.gateway, FlakyGateway()
 request = propose("acme corp", 25.0, "Payment during gateway outage")
 spent_before = sdk.budget_tracker.daily_spend(request.agent_id)
-failed = sdk.execute_payment(request)
-assert not failed.executed and "card network timeout" in (failed.error or "")
-assert sdk.budget_tracker.daily_spend(request.agent_id) == spent_before  # nothing committed
-retried = sdk.execute_payment(request)
+uncertain = sdk.execute_payment(request)
+assert not uncertain.executed and uncertain.status == "unknown"
+# Unknown exposure remains reserved until the provider confirms its outcome.
+assert sdk.budget_tracker.daily_spend(request.agent_id) == spent_before + request.amount
+repeated = sdk.execute_payment(request)
+assert repeated.status == "unknown" and repeated.replayed
+assert len(sdk.gateway.charges) == 1
+reconciled = sdk.reconcile_payment(request.request_id)
 print(
-    f"[gateway]   first_error={failed.error!r} retried={retried.executed} "
-    f"ref={retried.gateway_reference}"
+    f"[gateway]   initial_status={uncertain.status} reconciled={reconciled.status} "
+    f"ref={reconciled.gateway_reference}"
 )
-assert retried.executed
+assert reconciled.executed and len(sdk.gateway.charges) == 1
 sdk.gateway = healthy_gateway
 
 # 7. Inbound webhook from Paiziq → verify its signature before trusting it.

@@ -46,7 +46,7 @@ def _event_body(event: dict[str, Any]) -> dict[str, Any]:
 class IngestStore:
     def __init__(self, path: str = ":memory:") -> None:
         self._conn = sqlite3.connect(path, check_same_thread=False)
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         with self._lock:
             apply_migrations(self._conn)
 

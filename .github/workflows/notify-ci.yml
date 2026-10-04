@@ -1,0 +1,62 @@
+name: CI result notifications
+
+on:
+  workflow_run:
+    workflows: ['SDK CI and Azure deployment']
+    types: [completed]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Notify repository contributors
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          NOTIFICATION_ISSUE: ${{ vars.CI_NOTIFICATION_ISSUE }}
+          EXTRA_USERS: ${{ vars.CI_NOTIFICATION_USERS }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const run = context.payload.workflow_run;
+            const issue_number = Number(process.env.NOTIFICATION_ISSUE);
+            if (!Number.isInteger(issue_number) || issue_number <= 0) {
+              throw new Error('Set CI_NOTIFICATION_ISSUE to the CI results issue number.');
+            }
+            const contributors = await github.paginate(github.rest.repos.listContributors, {
+              owner, repo, per_page: 100
+            });
+            const users = new Set(contributors.filter(user => user.type === 'User').map(user => user.login));
+            try {
+              const collaborators = await github.paginate(github.rest.repos.listCollaborators, {
+                owner, repo, per_page: 100
+              });
+              collaborators.filter(user => user.type === 'User').forEach(user => users.add(user.login));
+            } catch (error) {
+              if (![403, 404].includes(error.status)) throw error;
+              core.info('Using configured collaborator recipients alongside live contributor discovery.');
+            }
+            (process.env.EXTRA_USERS || '').split(/[\s,]+/).filter(Boolean).forEach(user => users.add(user));
+            const mentions = [...users].filter(user => /^[a-z\d](?:[a-z\d-]*[a-z\d])?$/i.test(user)).sort().map(user => '@' + user).join(' ');
+            const marker = '<!-- ci-run-' + run.id + '-attempt-' + run.run_attempt + ' -->';
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100
+            });
+            if (comments.some(comment => comment.body.includes(marker))) {
+              core.info('This run attempt has already been reported.');
+              return;
+            }
+            const body = [
+              marker,
+              '**CI result: ' + run.conclusion + '**',
+              '',
+              '[View build and deployment run](' + run.html_url + ')',
+              'Workflow: ' + run.name + ' · commit: ' + run.head_sha.slice(0, 12) + ' · event: ' + run.event,
+              '',
+              mentions
+            ].join('\n');
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });

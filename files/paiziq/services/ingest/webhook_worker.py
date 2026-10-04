@@ -83,6 +83,7 @@ async def worker_loop(
     tick = 0
     while not stop.is_set():
         try:
+            router.publish_execution_events()
             await process_due_deliveries(webhooks)
             router.check_sla_breaches()
             if tick % 60 == 0:

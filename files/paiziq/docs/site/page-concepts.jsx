@@ -21,7 +21,7 @@ function PageConcepts() {
 
       <H2 id="rules" n="02">The decision engine</H2>
       <p>
-        Rules run in order and are pure functions of the request and policy — no LLM, no randomness,
+        Rules use the request, policy and evaluation context, including current spend history — no LLM, no randomness,
         no network. The strictest outcome wins: any <code>rejected</code> beats any
         <code> needs_review</code> beats <code>approved</code>.
       </p>
@@ -43,7 +43,7 @@ function PageConcepts() {
       </div>
       <Callout type="info">
         Determinism is what makes the audit trail trustworthy: re-running a decision with the same
-        request and the same policy always produces the same verdict and the same reasons.
+        request, policy and frozen evaluation context produces the same verdict and reasons.
       </Callout>
 
       <H2 id="fourway" n="03">The 4-Way Match</H2>
@@ -55,7 +55,7 @@ function PageConcepts() {
         <li><strong>Identity</strong> — the same agent and principal that were reviewed.</li>
         <li><strong>Intent</strong> — the decision belongs to this exact request.</li>
         <li><strong>Policy</strong> — the decision status still permits execution.</li>
-        <li><strong>Transaction</strong> — amount, currency, and merchant are unchanged since review.</li>
+        <li><strong>Transaction</strong> — the full payload, including amount, currency, merchant, category, metadata and mandate, is unchanged since review.</li>
       </ul>
       <CodeBlock file="tamper.py" lang="python" code={
 `decision = sdk.review_payment(request)

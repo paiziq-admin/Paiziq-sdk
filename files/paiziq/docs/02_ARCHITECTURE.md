@@ -146,7 +146,41 @@ generic-payment bypass check is also a route-level check before the
 payment transition rather than a database constraint, leaving a narrow
 concurrent-review-creation race in the current SQLite implementation.
 
-**Execution flow.** `execute_payment` retrieves (or creates) the review, applies the human-approval override for `needs_review` if `approve_review` was recorded, then runs the 4-Way Match: identity vs mandate, intent vs mandate bounds, policy verdict, and the tamper check comparing the live payload to the reviewed snapshot. Only a fully passing audit reaches `PaymentGateway.charge()`. Spend commits to the budget ledger only after successful execution, so concurrent reviews can't double-reserve.
+**Execution flow (0.3.0).** `execute_payment` freezes the complete request,
+checks its reviewed digest and current policy revision, checks review expiry,
+and re-evaluates the rules against current history. A human override applies
+to one reviewed revision. The four-way audit must pass before an atomic
+ledger claim reserves capacity. The ledger records `submitted` before the
+gateway call. Success commits the reservation; an explicit decline releases
+it. An ambiguous result becomes `unknown` and keeps the reservation until
+receipt reconciliation. Repeated calls return the stored execution. A failed
+post-charge write preserves the provider confirmation and reports accounting
+as pending. A trace or optional audit-export failure never changes the charge.
+
+**Authority and evidence (0.3.0).** A SQLite file coordinates local workers;
+the default in-memory ledger is suitable only for one process lifetime.
+`HostedExecutionLedger` uses the backend's policy and shared ledger as the
+final authority. A dashboard endpoint configures telemetry only. Budget and
+velocity history are scoped by organization, environment, agent and currency;
+daily/monthly windows are rolling 24 hours/30 days. Unresolved reservations
+never age out automatically. Payment amounts use validated decimal currency
+units. Request evidence includes mandate, metadata and category; a receipt
+timestamp is excluded from the request digest. Authorization evidence and
+business events cannot be updated or deleted. State is a mutable projection.
+
+**Provider and publication boundary (0.3.0).** Optional
+`charge_idempotent(request, key)` and `lookup(key)` methods support provider
+deduplication and receipt recovery. A legacy `charge()` provider remains
+supported, but an exception is unknown unless it is `GatewayDeclined`.
+Reconciliation never charges. The hosted reporter proves claim ownership;
+admin reconciliation requires evidence and a reason. These are trusted
+executor/operator assertions, not independent provider attestations.
+Execution state and its durable event commit together. The outbox worker
+creates each webhook delivery once per event/endpoint and records an
+append-only acknowledgment in the same transaction. Network delivery remains
+at least once, so consumers must deduplicate by event ID. This outbox covers
+execution events; the older independent review/audit publication flow above
+retains its stated boundary.
 
 **Trace flow.** Spans queue to a bounded buffer; a daemon thread batches (size or interval), POSTs to `{endpoint}/v1/traces` with exponential-backoff retries, and drops with a warning under sustained backpressure. The invariant throughout the SDK: observability and notification failures are logged, never raised.
 

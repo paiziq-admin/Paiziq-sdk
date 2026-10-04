@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from audit import AuditLog
-from auth import actor_for, require_admin_key, require_read_key
+from auth import AuthContext, actor_for, require_admin_context, require_read_context
+from routers.payments import _authorize_env
 from deps import get_audit_log, get_org_store, get_webhook_store
 from envelope import ApiError, list_meta, ok
 from stores.orgs import OrgStore
@@ -32,16 +33,21 @@ class EndpointPatch(BaseModel):
 @router.post("/v1/webhook-endpoints")
 def create_endpoint(
     body: EndpointCreate,
-    api_key: str = Depends(require_admin_key),
+    context: AuthContext = Depends(require_admin_context),
     webhooks: WebhookStore = Depends(get_webhook_store),
     orgs: OrgStore = Depends(get_org_store),
     audit: AuditLog = Depends(get_audit_log),
 ) -> dict[str, Any]:
+    _authorize_env(context, body.env_id)
     if orgs.get_environment(body.env_id) is None:
         raise ApiError(404, "not_found", f"environment not found: {body.env_id}")
-    record, secret = webhooks.create_endpoint(body.env_id, body.url.strip(), body.events)
+    record, secret = webhooks.create_endpoint(
+        body.env_id, body.url.strip(), body.events
+    )
     audit.record(
-        actor_for(api_key), "webhook_endpoint.create", record["id"],
+        actor_for(context),
+        "webhook_endpoint.create",
+        record["id"],
         {"env_id": body.env_id, "url": record["url"], "events": record["events"]},
     )
     return ok({**record, "secret": secret})
@@ -49,12 +55,15 @@ def create_endpoint(
 
 @router.get("/v1/webhook-endpoints")
 def list_endpoints(
-    api_key: str = Depends(require_read_key),
+    context: AuthContext = Depends(require_read_context),
     env_id: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     webhooks: WebhookStore = Depends(get_webhook_store),
 ) -> dict[str, Any]:
+    if context.env_id is not None:
+        _authorize_env(context, env_id or context.env_id)
+        env_id = context.env_id
     items, total = webhooks.list_endpoints(env_id, limit, offset)
     return ok(items, meta=list_meta(total, limit, offset))
 
@@ -63,23 +72,27 @@ def list_endpoints(
 def patch_endpoint(
     endpoint_id: str,
     body: EndpointPatch,
-    api_key: str = Depends(require_admin_key),
+    context: AuthContext = Depends(require_admin_context),
     webhooks: WebhookStore = Depends(get_webhook_store),
     audit: AuditLog = Depends(get_audit_log),
 ) -> dict[str, Any]:
-    if webhooks.get_endpoint(endpoint_id) is None:
+    endpoint = webhooks.get_endpoint(endpoint_id)
+    if endpoint is None:
         raise ApiError(404, "not_found", f"webhook endpoint not found: {endpoint_id}")
+    _authorize_env(context, endpoint["env_id"])
     record = webhooks.update_endpoint(
         endpoint_id, url=body.url, events=body.events, status=body.status
     )
     assert record is not None
-    audit.record(actor_for(api_key), "webhook_endpoint.update", endpoint_id, body.model_dump())
+    audit.record(
+        actor_for(context), "webhook_endpoint.update", endpoint_id, body.model_dump()
+    )
     return ok(record)
 
 
 @router.get("/v1/webhook-deliveries")
 def list_deliveries(
-    api_key: str = Depends(require_read_key),
+    context: AuthContext = Depends(require_read_context),
     endpoint_id: Optional[str] = Query(default=None),
     state: Optional[str] = Query(default=None),
     env_id: Optional[str] = Query(default=None),
@@ -90,6 +103,13 @@ def list_deliveries(
     offset: int = Query(default=0, ge=0),
     webhooks: WebhookStore = Depends(get_webhook_store),
 ) -> dict[str, Any]:
+    if context.env_id is not None:
+        _authorize_env(context, env_id or context.env_id)
+        env_id = context.env_id
+    if endpoint_id:
+        endpoint = webhooks.get_endpoint(endpoint_id)
+        if endpoint is not None:
+            _authorize_env(context, endpoint["env_id"])
     items, total = webhooks.list_deliveries(
         endpoint_id,
         state,
@@ -106,10 +126,12 @@ def list_deliveries(
 @router.get("/v1/webhook-deliveries/{delivery_id}")
 def get_delivery(
     delivery_id: str,
-    api_key: str = Depends(require_read_key),
+    context: AuthContext = Depends(require_read_context),
     webhooks: WebhookStore = Depends(get_webhook_store),
 ) -> dict[str, Any]:
     record = webhooks.get_delivery(delivery_id)
     if record is None:
         raise ApiError(404, "not_found", f"delivery not found: {delivery_id}")
+    endpoint = webhooks.get_endpoint(record["endpoint_id"])
+    _authorize_env(context, endpoint["env_id"])
     return ok({**record, "logs": webhooks.delivery_logs(delivery_id)})

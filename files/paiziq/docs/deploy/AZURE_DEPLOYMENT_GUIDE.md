@@ -2,7 +2,7 @@
 
 Deploy the Paiziq backend (ingest / control plane) to Azure, publish the
 live-data dashboard, and run the Northstar demo so real SDK results appear in
-the dashboard. Last updated 2026-10-03.
+the dashboard. Last updated 2026-10-04.
 
 ## 1. Scope and status
 
@@ -10,16 +10,22 @@ the dashboard. Last updated 2026-10-03.
 | --- | --- | --- |
 | Backend container package (`services/ingest/Dockerfile`, `entrypoint.sh`, `.dockerignore`) | Verified locally | `make docker-smoke` builds the image, starts it in production mode, and passes 5/5 smoke checks |
 | Northstar demo runner (`scripts/northstar_demo.py`) | Completed against Azure on 2026-10-03 | Three persisted payments, matching decisions and SDK traces; one open review; demo read-only key verified; dashboard CORS allowed |
-| Deployment lane tests (`tests/test_deploy_package.py`) | Passing | 18 tests under `make ingest-test` |
+| Deployment lane tests (`tests/test_deploy_package.py`) | Passing | 19 tests under `make ingest-test` |
 | Azure deploy script (`deploy/azure/deploy_backend.sh`) | Deployed on 2026-10-03 | Healthy East US 2 Container App; hosted smoke 5/5; trace, agent, SDK key and read key survive a revision restart |
-| Dashboard publish from the `dev` branch | Documented, **not yet performed** | Needs a push to GitHub and a manual workflow dispatch |
+| Dashboard main-branch deployment | Verified on 2026-10-03 | Automatic quality/E2E/deployment and contributor notification passed |
 
 Nothing in this guide seeds the static dashboard. The dashboard reads live data
 from the backend; the demo creates that data through the SDK.
 
 ### Completed Azure rollout — 2026-10-03
 
-The backend is **online**. API base URL:
+The initial rollout was verified on 2026-10-03. On 2026-10-04 the subscription
+API reports `Warned`, while Container Apps returns `ManagedClusterSuspended`
+and says the subscription is disabled. The app reports `Failed`, and its
+health endpoint times out. The subscription Owner must resolve the warning
+and restore the suspended compute; hosted deployment cannot currently be
+verified. See [Azure subscription states](https://learn.microsoft.com/en-us/azure/cost-management-billing/manage/subscription-states).
+API base URL:
 `https://paiziq-ingest-dev.whiteforest-4bca54b1.eastus2.azurecontainerapps.io`.
 [API documentation](https://paiziq-ingest-dev.whiteforest-4bca54b1.eastus2.azurecontainerapps.io/docs)
 and [health check](https://paiziq-ingest-dev.whiteforest-4bca54b1.eastus2.azurecontainerapps.io/health).
@@ -71,10 +77,80 @@ Connection settings in the local `backend.env`:
 The bootstrap key remains in `PAIZIQ_INGEST_KEYS` for server administration.
 Do not give it to the browser. No reviewer key was issued. The Northstar demo
 subsequently created three synthetic payments and executed one with the SDK's
-`MockGateway`; no real gateway was charged. The deployed dashboard's
-frontend integration/publish step is still separate; only its CORS origin
-was enabled on the API. The deployment-script fixes and rollout notes are
+`MockGateway`; no real gateway was charged. The dashboard's live frontend was subsequently published by its main-branch CI
+on 2026-10-03. The deployment-script fixes and rollout notes are
 included with the regression tests in this change.
+### Automatic main-branch CI
+
+The repository-root `.github/workflows/ci.yml` is **SDK CI and Azure deployment**.
+The workflows under `files/paiziq/.github/` are historical project templates;
+GitHub only discovers workflows at the repository root.
+
+Every push or merge to `main` runs `make check build` with Python 3.12. Ruff is
+pinned to 0.4.10 in CI to match the validated lint rules. Pull requests run the
+quality gate and build without accessing deployment credentials. Manual runs
+deploy only when selected on `main`.
+
+After quality passes, CI builds and smoke-tests the Linux container, pushes
+`paiziqdevacr8406cce0.azurecr.io/paiziq-ingest:<full commit SHA>`, and runs
+`make ci-deploy-azure`. This uses `deploy_existing_backend.sh` rather than the
+full infrastructure bootstrap script: it retains existing secrets, registry
+credentials, environment variables and the Azure Files mount. Old active
+revisions are deactivated and must have zero replicas before the update.
+Expect a short outage; SQLite remains a single-process development setup.
+Hosted health, invalid/missing-key rejection and CORS smoke checks must pass
+for a successful run. CI does not store a backend API key and does not perform
+the positive authenticated login probe; the container smoke lane checks that
+probe with an ephemeral local-only key.
+
+GitHub repository configuration:
+
+| Setting | Type | Value / purpose |
+| --- | --- | --- |
+| `AZURE_CLIENT_ID` | Variable | `58867675-6e0c-475f-a09b-34e93833900c` |
+| `AZURE_TENANT_ID` | Variable | `4a384267-1d1e-4008-b8ba-10d00c3b5f71` |
+| `AZURE_SUBSCRIPTION_ID` | Variable | `8406cce0-3a67-4d8e-b536-965b930989af` |
+| `CI_NOTIFICATION_ISSUE` | Variable | Number of the CI results issue |
+| `CI_NOTIFICATION_USERS` | Variable | Fallback collaborator usernames, space-separated |
+
+The managed identity `paiziq-github-deploy` trusts only GitHub OIDC subject
+`repo:paiziq-admin/Paiziq-sdk:ref:refs/heads/main`. No Azure client secret or
+cached personal login is stored in GitHub. An Azure Owner / User Access
+Administrator must grant these roles to principal
+`171abb64-1aad-4bec-b59f-aa935eca4c1a` before backend CI can deploy:
+
+```bash
+az role assignment create \
+  --assignee-object-id 171abb64-1aad-4bec-b59f-aa935eca4c1a \
+  --assignee-principal-type ServicePrincipal --role Contributor \
+  --scope /subscriptions/8406cce0-3a67-4d8e-b536-965b930989af/resourceGroups/paiziq-dev/providers/Microsoft.App/containerApps/paiziq-ingest-dev
+az role assignment create \
+  --assignee-object-id 171abb64-1aad-4bec-b59f-aa935eca4c1a \
+  --assignee-principal-type ServicePrincipal --role AcrPush \
+  --scope /subscriptions/8406cce0-3a67-4d8e-b536-965b930989af/resourceGroups/paiziq-dev/providers/Microsoft.ContainerRegistry/registries/paiziqdevacr8406cce0
+```
+
+Subscription Contributor cannot create role assignments. Until those grants
+exist, backend quality/build checks run, but Azure deployment fails. After the
+Owner grants access, rerun the failed workflow from Actions.
+
+Verification on 2026-10-03: [SDK CI run](https://github.com/paiziq-admin/Paiziq-sdk/actions/runs/37175728093)
+passed quality, package build and container smoke, then failed Azure login
+with `No subscriptions found` because the identity has no role assignments.
+The backend app was not changed by that run. The
+[dashboard push run](https://github.com/paiziq-admin/Paiziq-Dashboard/actions/runs/37175628199)
+passed quality, Chromium E2E and deployment. Both notification workflows
+completed successfully and mentioned contributors in the
+[SDK results thread](https://github.com/paiziq-admin/Paiziq-sdk/issues/2) and
+[dashboard results thread](https://github.com/paiziq-admin/Paiziq-Dashboard/issues/3).
+
+`notify-ci.yml` reports every completed CI run in a dedicated issue, including
+success, failure and cancellation, and mentions contributors/collaborators.
+Contributor discovery is live; if collaborator enumeration is denied, the
+configured fallback list is used. Update that list when repository access
+changes. GitHub email/inbox delivery remains subject to users' notification
+preferences. The dashboard has equivalent main deployment and notifications;
+its existing Static Web Apps deployment-token secret is retained.
 
 ## 2. Topology
 
@@ -471,6 +547,9 @@ a short outage on redeployment. `nobrl` disables server byte-range locking;
 it does not make SQLite safe for simultaneous writers in separate processes.
 Keep one replica, one worker, and one active revision. Volume updates remove
 the exported revision suffix so Azure can assign a fresh immutable revision.
+The infrastructure script applies image, environment and volume together in
+one template update; it does not start an image revision and then attach the
+volume through a second swap.
 
 ### Rotate the bootstrap key
 
@@ -527,8 +606,11 @@ Or `IMAGE_TAG=<previous sha> ./deploy/azure/deploy_backend.sh --skip-build`.
 - The Azure CLI rollout completed on 2026-10-03; see the live status in §1.
   Hosted smoke and restart-persistence checks passed. This is a dev deployment,
   not the managed multi-tenant production persistence/queue topology.
-- The dashboard merge/dispatch (§6) is documented, not performed; it touches a
-  GitHub repository and should be done by an operator with push rights.
+- The backend is deployed. Automatic redeployment uses the existing-app CI
+  lane above; the original bootstrap script is retained for infrastructure
+  setup and should be watched when used for a new environment.
+- The dashboard was deployed by its main-branch CI on 2026-10-03; see the
+  successful run linked in §1.
 - SQLite on Azure Files is a development-tier arrangement: single replica, no
   horizontal scaling, and a short outage during revision swaps.
   The Phase 1 tracker still lists the Terraform/RDS path for production.

@@ -121,13 +121,13 @@ class BudgetTracker:
     def __init__(self, store: Optional[BudgetStore] = None) -> None:
         self.store: BudgetStore = store or InMemoryBudgetStore()
 
-    def daily_spend(self, agent_id: str) -> float:
+    def daily_spend(self, agent_id: str, currency: str = "USD") -> float:
         return self.store.spend_since(agent_id, time.time() - self.DAY)
 
-    def monthly_spend(self, agent_id: str) -> float:
+    def monthly_spend(self, agent_id: str, currency: str = "USD") -> float:
         return self.store.spend_since(agent_id, time.time() - self.MONTH)
 
-    def hourly_tx_count(self, agent_id: str) -> int:
+    def hourly_tx_count(self, agent_id: str, currency: str = "USD") -> int:
         return self.store.tx_count_since(agent_id, time.time() - self.HOUR)
 
     def commit(self, agent_id: str, amount: float) -> None:

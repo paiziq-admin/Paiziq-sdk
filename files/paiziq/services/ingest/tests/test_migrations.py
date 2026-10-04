@@ -20,14 +20,27 @@ from migrations import (  # noqa: E402
 from storage import IngestStore  # noqa: E402
 
 EXPECTED_TABLES = {
-    "spans", "notifications", "organizations", "environments", "agents",
-    "api_keys", "payments", "payment_transitions", "decisions", "reviews",
-    "policies", "policy_versions", "audit_log", "schema_migrations",
+    "spans",
+    "notifications",
+    "organizations",
+    "environments",
+    "agents",
+    "api_keys",
+    "payments",
+    "payment_transitions",
+    "decisions",
+    "reviews",
+    "policies",
+    "policy_versions",
+    "audit_log",
+    "schema_migrations",
 }
 
 
 def _tables(conn: sqlite3.Connection) -> set[str]:
-    rows = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+    rows = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table'"
+    ).fetchall()
     return {r[0] for r in rows if not r[0].startswith("sqlite_")}
 
 
@@ -60,9 +73,11 @@ def test_legacy_pre_migration_database_adopts_cleanly(tmp_path):
     """A DB created by the old inline schema migrates without error."""
     db = tmp_path / "legacy.db"
     conn = sqlite3.connect(db)
-    conn.execute("CREATE TABLE spans (span_id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, "
-                 "name TEXT NOT NULL, parent_span_id TEXT, start_ms INTEGER, end_ms INTEGER, "
-                 "status TEXT, payload TEXT NOT NULL)")
+    conn.execute(
+        "CREATE TABLE spans (span_id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, "
+        "name TEXT NOT NULL, parent_span_id TEXT, start_ms INTEGER, end_ms INTEGER, "
+        "status TEXT, payload TEXT NOT NULL)"
+    )
     conn.execute("INSERT INTO spans VALUES ('s1', 'tr1', 'n', NULL, 1, 2, 'ok', '{}')")
     conn.commit()
     conn.close()
@@ -124,8 +139,7 @@ def test_review_workflow_columns_and_indexes_are_installed():
     conn = sqlite3.connect(":memory:")
     apply_migrations(conn)
     columns = {
-        row[1]: row[2]
-        for row in conn.execute("PRAGMA table_info(reviews)").fetchall()
+        row[1]: row[2] for row in conn.execute("PRAGMA table_info(reviews)").fetchall()
     }
     assert {
         "priority": "TEXT",
@@ -133,10 +147,7 @@ def test_review_workflow_columns_and_indexes_are_installed():
         "assigned_at_ms": "INTEGER",
         "updated_at_ms": "INTEGER",
     }.items() <= columns.items()
-    indexes = {
-        row[1]
-        for row in conn.execute("PRAGMA index_list(reviews)").fetchall()
-    }
+    indexes = {row[1] for row in conn.execute("PRAGMA index_list(reviews)").fetchall()}
     assert "idx_reviews_payment_state" in indexes
 
 
@@ -151,3 +162,28 @@ def test_audit_log_is_append_only():
         conn.execute("UPDATE audit_log SET actor = 'evil' WHERE audit_id = 'aud_1'")
     with pytest.raises(sqlite3.DatabaseError, match="append-only"):
         conn.execute("DELETE FROM audit_log WHERE audit_id = 'aud_1'")
+
+
+def test_shared_execution_schema_and_upgrade_metadata_are_installed():
+    from paiziq.execution import LEDGER_SCHEMA
+    from migrations import MIGRATIONS_DIR
+
+    expected = (
+        "-- Shared SDK execution schema. Keep in sync with paiziq.execution.LEDGER_SCHEMA.\n"
+        + ";\n\n".join(s.rstrip(";") for s in LEDGER_SCHEMA)
+        + ";\n"
+    )
+    assert (MIGRATIONS_DIR / "0010_shared_execution_ledger.sql").read_text() == expected
+    conn = sqlite3.connect(":memory:")
+    apply_migrations(conn)
+    assert {
+        "execution_records",
+        "execution_events",
+        "execution_outbox_ack",
+        "execution_bindings",
+        "decision_contexts",
+        "payment_idempotency",
+    } <= _tables(conn)
+    assert "context_json" in {
+        row[1] for row in conn.execute("PRAGMA table_info(decision_contexts)")
+    }

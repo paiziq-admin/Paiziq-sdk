@@ -15,15 +15,15 @@ The core SDK has **zero runtime dependencies** — stdlib only — so it never c
 ## Install
 
 ```bash
-pip install paiziq                 # core
-pip install paiziq[langchain]      # + LangChain callback handler
-pip install paiziq[openai]         # + OpenAI tool-call guard
+pip3 install paiziq                 # core
+pip3 install 'paiziq[langchain]'     # + LangChain callback handler
+pip3 install 'paiziq[openai]'        # + OpenAI tool-call guard
 ```
 
 Local development:
 
 ```bash
-cd sdk && pip install -e .[dev] && pytest
+make venv install test
 ```
 
 ## Quickstart
@@ -69,6 +69,55 @@ trail  = sdk.get_audit_trail(request.request_id)
 | `approve_review(request_id, reviewer_id)` | Record human approval for a flagged payment. |
 | `get_audit_trail(request_id=None, limit=100) -> list[dict]` | Immutable event history. |
 | `shutdown()` | Flush trace exporters. |
+
+## Execution authority and recovery (0.3.0)
+
+The default execution ledger is in memory. Select a file for restart durability:
+
+```python
+from paiziq import PaiziqSDK, PaymentPolicy, SQLiteExecutionLedger
+
+sdk = PaiziqSDK(
+    policy=PaymentPolicy(daily_budget=100),
+    execution_ledger=SQLiteExecutionLedger("payments.sqlite"),
+    org_id="example-org", env_id="sandbox",
+)
+```
+
+Workers that share a budget must share the ledger. For hosted execution,
+use `HostedExecutionLedger(SyncHTTPTransport(endpoint, api_key=key),
+org_id=org_id, env_id=env_id)` with registered IDs. The server's active policy
+is the final authority; local rules can add restrictions. A trace endpoint
+does not configure hosted execution. Resolve hosted human reviews through
+the service review API; a local approval cannot authorize a server hold.
+
+Keep the same request ID across retries and restarts. Repeated execution
+returns the original record. A changed payload, policy revision or expired
+review requires review again. Review approval lasts 15 minutes by default.
+The ledger reserves before submission and tracks `reserved`, `submitted`,
+`confirmed`, `failed`, and `unknown`; preflight refusal returns `blocked`.
+Confirmed spend uses rolling 24-hour/30-day windows, scoped by organization,
+environment, agent and currency. Unresolved reservations do not age out.
+
+Call `sdk.reconcile_payment(request_id)` to query a provider receipt without
+charging. A legacy gateway exception means unknown unless it explicitly
+raises `GatewayDeclined`. Optional `charge_idempotent(request, key)` and
+`lookup(key) -> GatewayOutcome` provide provider deduplication and recovery.
+Hosted reconciliation requires an admin credential and trusted evidence.
+Do not retry a charge when `accounting_pending=True`: the provider result is
+known, but its ledger write could not be confirmed.
+
+`get_execution_events()` reads local append-only evidence. For hosted events,
+read `/v1/payments/{payment_id}/execution`. Hosted mode uses a separate local
+review store; pass a file `evidence_ledger` to retain those local reviews too.
+The existing `get_audit_trail()` is an optional projection; it is not the
+execution authority. Legacy budget history remains USD-only and cannot
+coordinate reservations on its own.
+
+These execution guarantees apply to `execute_payment()` and the hosted
+claim/report protocol. Existing framework wrappers only review tool calls;
+route the actual charge through the managed execution path. Execution does
+not mutate a previously returned `Decision`; read the execution evidence.
 
 ## Framework integrations
 

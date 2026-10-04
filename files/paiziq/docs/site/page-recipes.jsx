@@ -81,20 +81,26 @@ exporter = ScrubbingExporter(
 sdk = PaiziqSDK(exporters=[exporter])`} />
 
       <H2 id="redis" n="03">Share budgets across replicas</H2>
+      <Callout type="warn">
+        The wrappers above review tool calls. Execution reservations and duplicate protection
+        require the actual payment to use <code>sdk.execute_payment()</code> or the hosted
+        claim/report protocol. A separate charge inside a reviewed tool is outside that guarantee.
+      </Callout>
       <p>
-        The in-memory budget tracker is per-process. With several agent replicas, point them at one
-        Redis so daily and monthly budgets are enforced globally.
+        In 0.3.0, workers that share a budget must share an atomic execution authority.
+        Use one SQLite file for local workers. Use HostedExecutionLedger for workers on
+        different machines. A legacy RedisBudgetStore provides historical USD spend only;
+        it does not coordinate new reservations by itself.
       </p>
       <CodeBlock file="redis.sh" lang="bash" code={
-`$ pip3 install "paiziq[redis]"`} />
+`$ pip3 install paiziq`} />
       <CodeBlock file="shared_budget.py" lang="python" code={
-`from paiziq import BudgetTracker, PaiziqSDK, PaymentPolicy, RedisBudgetStore
+`from paiziq import PaiziqSDK, PaymentPolicy, SQLiteExecutionLedger
 
 sdk = PaiziqSDK(
     policy=PaymentPolicy(daily_budget=500.0),
-    budget_tracker=BudgetTracker(
-        store=RedisBudgetStore(url="redis://localhost:6379/0"),
-    ),
+    execution_ledger=SQLiteExecutionLedger("shared-payments.sqlite"),
+    org_id="example-org", env_id="sandbox",
 )`} />
       <Callout type="info">
         Same pattern for durable audits: <code>pip3 install "paiziq[postgres]"</code> and pass

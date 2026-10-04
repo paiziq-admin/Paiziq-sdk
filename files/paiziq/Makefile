@@ -4,7 +4,7 @@
 SDK_DIR     := sdk
 INGEST_DIR  := services/ingest
 VENV        := $(SDK_DIR)/.venv
-PY          := $(VENV)/bin/python
+PY          := $(VENV)/bin/python3
 PIP         := $(PY) -m pip
 
 .DEFAULT_GOAL := help
@@ -12,7 +12,8 @@ PIP         := $(PY) -m pip
 .PHONY: help venv install lint typecheck test coverage examples build \
         openapi ingest-install ingest-test ingest-run check clean \
         e2e-stack e2e-seed e2e-verify e2e-test \
-        docker-build docker-smoke smoke northstar-demo deploy-azure
+        docker-build docker-smoke smoke ci-smoke northstar-demo \
+        procurement-demo phase0-demo deploy-azure ci-deploy-azure
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -28,34 +29,34 @@ lint: ## Run ruff over SDK sources and tests
 	$(PY) -m ruff check $(SDK_DIR)/src $(SDK_DIR)/tests
 
 typecheck: ## Run mypy over the SDK package
-	cd $(SDK_DIR) && .venv/bin/python -m mypy src/paiziq
+	cd $(SDK_DIR) && .venv/bin/python3 -m mypy src/paiziq
 
 test: ## Run the SDK test suite
-	cd $(SDK_DIR) && .venv/bin/python -m pytest tests/ -q
+	cd $(SDK_DIR) && .venv/bin/python3 -m pytest tests/ -q
 
 coverage: ## Run SDK tests with coverage report
-	cd $(SDK_DIR) && .venv/bin/python -m pytest tests/ -q \
+	cd $(SDK_DIR) && .venv/bin/python3 -m pytest tests/ -q \
 		--cov=paiziq --cov-report=term-missing
 
 examples: ## Run the runnable examples end to end
-	cd $(SDK_DIR) && PYTHONPATH=src .venv/bin/python examples/happy_path.py
-	cd $(SDK_DIR) && PYTHONPATH=src .venv/bin/python examples/framework_integrations.py
-	cd $(SDK_DIR) && PYTHONPATH=src .venv/bin/python examples/payment_agent.py
+	cd $(SDK_DIR) && PYTHONPATH=src .venv/bin/python3 examples/happy_path.py
+	cd $(SDK_DIR) && PYTHONPATH=src .venv/bin/python3 examples/framework_integrations.py
+	cd $(SDK_DIR) && PYTHONPATH=src .venv/bin/python3 examples/payment_agent.py
 
 build: ## Build the sdist and wheel
-	cd $(SDK_DIR) && .venv/bin/python -m build
+	cd $(SDK_DIR) && .venv/bin/python3 -m build
 
 openapi: ## Regenerate the OpenAPI spec and generated SDK client types
-	cd $(INGEST_DIR) && ../../$(VENV)/bin/python scripts/export_openapi.py
+	cd $(INGEST_DIR) && ../../$(VENV)/bin/python3 scripts/export_openapi.py
 
 ingest-install: ## Install ingest service dependencies
 	$(PIP) install -r $(INGEST_DIR)/requirements.txt
 
 ingest-test: ## Run the ingest service tests
-	cd $(INGEST_DIR) && ../../$(VENV)/bin/python -m pytest tests/ -q
+	cd $(INGEST_DIR) && ../../$(VENV)/bin/python3 -m pytest tests/ -q
 
 ingest-run: ## Run the ingest service locally on port 8800
-	cd $(INGEST_DIR) && ../../$(VENV)/bin/python -m uvicorn app:app --reload --port 8800
+	cd $(INGEST_DIR) && ../../$(VENV)/bin/python3 -m uvicorn app:app --reload --port 8800
 
 E2E_DB ?= $(CURDIR)/.e2e/paiziq-e2e.sqlite
 E2E_PORT ?= 8800
@@ -67,18 +68,18 @@ e2e-stack: ## Run ingest on :8800 with an isolated SQLite file and dashboard COR
 	mkdir -p "$(dir $(E2E_DB))"
 	cd $(INGEST_DIR) && PAIZIQ_ENV=development PAIZIQ_INGEST_KEYS=dev-key \
 		PAIZIQ_INGEST_DB="$(E2E_DB)" PAIZIQ_CORS_ORIGINS="$(PAIZIQ_CORS_ORIGINS)" \
-		../../$(VENV)/bin/python -m uvicorn app:app --host 127.0.0.1 --port $(E2E_PORT)
+		../../$(VENV)/bin/python3 -m uvicorn app:app --host 127.0.0.1 --port $(E2E_PORT)
 
 e2e-seed: ## Create the deterministic agent, policy, and three payments
 	cd $(INGEST_DIR) && PAIZIQ_ENDPOINT="$(PAIZIQ_ENDPOINT)" PAIZIQ_API_KEY="$(PAIZIQ_API_KEY)" \
-		../../$(VENV)/bin/python tests/e2e_support/simulated_agent.py
+		../../$(VENV)/bin/python3 tests/e2e_support/simulated_agent.py
 
 e2e-verify: ## Exercise journey endpoints and write the results markdown
 	cd $(INGEST_DIR) && PAIZIQ_ENDPOINT="$(PAIZIQ_ENDPOINT)" PAIZIQ_API_KEY="$(PAIZIQ_API_KEY)" \
-		../../$(VENV)/bin/python scripts/e2e_verify_endpoints.py
+		../../$(VENV)/bin/python3 scripts/e2e_verify_endpoints.py
 
 e2e-test: ## Run the payment-agent workflow integration tests
-	cd $(INGEST_DIR) && ../../$(VENV)/bin/python -m pytest tests/test_payment_agent_workflow_e2e.py -q
+	cd $(INGEST_DIR) && ../../$(VENV)/bin/python3 -m pytest tests/test_payment_agent_workflow_e2e.py -q
 
 DOCKER_IMAGE ?= paiziq-ingest:local
 DOCKER_SMOKE_PORT ?= 8801
@@ -104,12 +105,27 @@ smoke: ## Smoke-test a running backend (PAIZIQ_ENDPOINT, PAIZIQ_API_KEY, optiona
 	@PAIZIQ_API_KEY="$(PAIZIQ_API_KEY)" python3 $(INGEST_DIR)/scripts/smoke_backend.py \
 		--endpoint "$(PAIZIQ_ENDPOINT)" $(if $(PAIZIQ_DASHBOARD_URL),--origin "$(PAIZIQ_DASHBOARD_URL)",)
 
+ci-smoke: ## Check hosted health, authentication rejection and CORS without a server credential
+	@python3 $(INGEST_DIR)/scripts/smoke_backend.py --unauthenticated \
+		--endpoint "$(PAIZIQ_ENDPOINT)" $(if $(PAIZIQ_DASHBOARD_URL),--origin "$(PAIZIQ_DASHBOARD_URL)",)
+
 northstar-demo: ## Run the Northstar payment-agent demo with the real SDK against PAIZIQ_ENDPOINT
-	@cd $(INGEST_DIR) && PAIZIQ_API_KEY="$(PAIZIQ_API_KEY)" ../../$(VENV)/bin/python scripts/northstar_demo.py \
+	@cd $(INGEST_DIR) && PAIZIQ_API_KEY="$(PAIZIQ_API_KEY)" ../../$(VENV)/bin/python3 scripts/northstar_demo.py \
 		--endpoint "$(PAIZIQ_ENDPOINT)" $(if $(PAIZIQ_DASHBOARD_URL),--dashboard-url "$(PAIZIQ_DASHBOARD_URL)",)
+
+procurement-demo: ## Run the LangChain procurement agent (needs PAIZIQ_API_KEY and an LLM key)
+	@cd $(SDK_DIR) && PAIZIQ_API_KEY="$(PAIZIQ_API_KEY)" PAIZIQ_ENDPOINT="$(PAIZIQ_ENDPOINT)" \
+		PAIZIQ_DASHBOARD_URL="$(PAIZIQ_DASHBOARD_URL)" PYTHONPATH=src .venv/bin/python3 examples/procurement_agent.py
+
+phase0-demo: ## Seed managed confirmed/unknown execution evidence with mock providers
+	@cd $(INGEST_DIR) && PAIZIQ_API_KEY="$(PAIZIQ_API_KEY)" ../../$(VENV)/bin/python3 scripts/phase0_demo.py \
+		--endpoint "$(PAIZIQ_ENDPOINT)"
 
 deploy-azure: ## Deploy the backend to Azure Container Apps (see deploy/azure/backend.env.example)
 	./deploy/azure/deploy_backend.sh
+
+ci-deploy-azure: ## Update the existing Azure backend, retain configuration, and run hosted smoke
+	bash ./deploy/azure/deploy_existing_backend.sh
 
 check: lint test ingest-test examples ## Full quality gate (lint + all tests + examples)
 	@echo "All checks passed."

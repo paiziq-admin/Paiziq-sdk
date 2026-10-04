@@ -15,6 +15,20 @@ const CHANGELOG = [
     changed: [],
   },
   {
+    version: "0.3.0", date: "2026-10-04",
+    summary: "Site parity Phase 0: execution authority and durable evidence.",
+    added: [
+      ["Execution ledger", "atomic, currency-scoped reservations; immutable request, policy and review evidence; append-only business events and durable publication."],
+      ["Hosted authority", "explicit HostedExecutionLedger; claim/report/reconcile/read APIs; scoped idempotency and executor ownership."],
+      ["Receipt recovery", "provider idempotency and lookup seams, GatewayOutcome, and reconciliation without another charge."],
+      ["Full-stack evidence", "dashboard status, reserved exposure, snapshots and event history; mock-provider phase0-demo; migrations 0009–0011."],
+    ],
+    changed: [
+      ["Execution checks", "current policy, mandate, review expiry and shared budget are checked before submission. Repeated IDs return the original execution."],
+      ["Unknown results", "uncertain provider outcomes retain their reservation; confirmation followed by a ledger error returns accounting_pending."],
+    ],
+  },
+  {
     version: "0.2.0", date: "2026-06-09",
     summary: "Phase 1 hardening: production stores, PII scrubbing, ingest service, automation, and developer documentation.",
     added: [

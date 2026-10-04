@@ -138,6 +138,11 @@ def test_deploy_uses_scoped_registry_credentials_without_logging_secrets(tmp_pat
         "if args[:2] == ['containerapp', 'update'] and '--yaml' in args:\n"
         "    with open(args[args.index('--yaml') + 1]) as f: spec = json.load(f)\n"
         "    assert 'revisionSuffix' not in spec['properties']['template']\n"
+        "    container = spec['properties']['template']['containers'][0]\n"
+        "    assert container['image'] == 'testregistry.azurecr.io/paiziq-ingest:test'\n"
+        "    env = {item['name']: item for item in container['env']}\n"
+        "    assert env['PAIZIQ_INGEST_KEYS']['secretRef'] == 'ingest-keys'\n"
+        "    assert container['volumeMounts'] == [{'volumeName': 'data', 'mountPath': '/data'}]\n"
     )
     fake_az.chmod(0o755)
     password = secrets.token_urlsafe(32)
@@ -162,6 +167,9 @@ def test_deploy_uses_scoped_registry_credentials_without_logging_secrets(tmp_pat
     assert password not in result.stdout + result.stderr
     assert key not in result.stdout + result.stderr
     calls = [json.loads(line) for line in calls_path.read_text().splitlines()]
+    updates = [args for args in calls if args[:2] == ['containerapp', 'update']]
+    assert len(updates) == 1, 'image, environment and volume must be applied in one revision'
+    assert '--yaml' in updates[0]
     assert not any(args[:2] == ['group', 'create'] for args in calls)
     registry_call = next(
         args for args in calls
@@ -306,6 +314,15 @@ def test_smoke_cli_requires_api_key_env(monkeypatch, capsys):
     monkeypatch.delenv("PAIZIQ_API_KEY", raising=False)
     assert smoke_backend.main(["--endpoint", "http://127.0.0.1:1"]) == 2
     assert "PAIZIQ_API_KEY" in capsys.readouterr().err
+
+
+def test_smoke_cli_credential_free_mode_checks_health_and_auth_rejection(base_url, monkeypatch, capsys):
+    monkeypatch.delenv("PAIZIQ_API_KEY", raising=False)
+    assert smoke_backend.main(["--endpoint", base_url, "--unauthenticated"]) == 0
+    output = capsys.readouterr().out
+    assert "3/3 checks passed" in output
+    assert "wrong_key_rejected" in output and "missing_key_rejected" in output
+    assert "login_probe" not in output
 
 
 @pytest.fixture(scope="module")

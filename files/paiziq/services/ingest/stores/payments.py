@@ -7,6 +7,8 @@ payment's `updated_at_ms`.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
 import threading
 from typing import Any, Optional
@@ -15,7 +17,8 @@ from ids import new_id, now_ms
 
 _COLS = (
     "id, env_id, agent_id, principal_id, merchant, amount, currency, "
-    "intent_description, state, request_id, created_at_ms, updated_at_ms"
+    "intent_description, state, request_id, created_at_ms, updated_at_ms, "
+    "category, mandate_json, metadata_json"
 )
 
 # state → states it may transition to (contract §7)
@@ -38,10 +41,21 @@ class InvalidTransition(Exception):
 
 def _row(row: tuple) -> dict[str, Any]:
     return {
-        "id": row[0], "env_id": row[1], "agent_id": row[2], "principal_id": row[3],
-        "merchant": row[4], "amount": row[5], "currency": row[6],
-        "intent_description": row[7], "state": row[8], "request_id": row[9],
-        "created_at_ms": row[10], "updated_at_ms": row[11],
+        "id": row[0],
+        "env_id": row[1],
+        "agent_id": row[2],
+        "principal_id": row[3],
+        "merchant": row[4],
+        "amount": row[5],
+        "currency": row[6],
+        "intent_description": row[7],
+        "state": row[8],
+        "request_id": row[9],
+        "created_at_ms": row[10],
+        "updated_at_ms": row[11],
+        "category": row[12],
+        "mandate": json.loads(row[13]) if row[13] else None,
+        "metadata": json.loads(row[14]),
     }
 
 
@@ -61,20 +75,86 @@ class PaymentStore:
         intent_description: str,
         request_id: Optional[str],
         idempotency_key: Optional[str],
+        *,
+        category: str = "general",
+        mandate: Optional[dict] = None,
+        metadata: Optional[dict] = None,
+        scoped_idempotency: bool = False,
     ) -> dict[str, Any]:
         ts = now_ms()
         payment_id = new_id("pay")
+        snapshot = dict(
+            env_id=env_id,
+            agent_id=agent_id,
+            principal_id=principal_id,
+            merchant=merchant,
+            amount=amount,
+            currency=currency,
+            intent_description=intent_description,
+            request_id=request_id,
+            category=category,
+            mandate=mandate,
+            metadata=metadata or {},
+        )
+        digest = hashlib.sha256(
+            json.dumps(snapshot, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
         with self._lock:
-            self._conn.execute(
-                f"INSERT INTO payments ({_COLS}, idempotency_key) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    payment_id, env_id, agent_id, principal_id, merchant, amount,
-                    currency, intent_description, "proposed", request_id, ts, ts,
-                    idempotency_key,
-                ),
-            )
-            self._conn.commit()
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                if idempotency_key:
+                    if scoped_idempotency:
+                        existing = self._conn.execute(
+                            "SELECT payment_id, payload_digest FROM payment_idempotency "
+                            "WHERE env_id = ? AND idempotency_key = ?",
+                            (env_id, idempotency_key),
+                        ).fetchone()
+                        if existing and existing[1] != digest:
+                            raise ValueError("idempotency_conflict")
+                    else:
+                        existing = self._conn.execute(
+                            "SELECT id FROM payments WHERE idempotency_key = ?",
+                            (idempotency_key,),
+                        ).fetchone()
+                    if existing:
+                        row = self._conn.execute(
+                            f"SELECT {_COLS} FROM payments WHERE id = ?", (existing[0],)
+                        ).fetchone()
+                        if row[1] != env_id:
+                            raise ValueError("idempotency_scope_conflict")
+                        self._conn.commit()
+                        return _row(row)
+                self._conn.execute(
+                    f"INSERT INTO payments ({_COLS}, idempotency_key) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        payment_id,
+                        env_id,
+                        agent_id,
+                        principal_id,
+                        merchant,
+                        amount,
+                        currency,
+                        intent_description,
+                        "proposed",
+                        request_id,
+                        ts,
+                        ts,
+                        category,
+                        json.dumps(mandate) if mandate else None,
+                        json.dumps(metadata or {}),
+                        None if scoped_idempotency else idempotency_key,
+                    ),
+                )
+                if scoped_idempotency and idempotency_key:
+                    self._conn.execute(
+                        "INSERT INTO payment_idempotency VALUES (?, ?, ?, ?)",
+                        (env_id, idempotency_key, payment_id, digest),
+                    )
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
         record = self.get(payment_id)
         assert record is not None
         return record
@@ -108,13 +188,21 @@ class PaymentStore:
         from_ms: Optional[int] = None,
         to_ms: Optional[int] = None,
         sort: str = "created_desc",
+        request_id: Optional[str] = None,
     ) -> tuple[list[dict[str, Any]], int]:
         clauses: list[str] = []
         params: list[Any] = []
-        for column, value in (("env_id", env_id), ("agent_id", agent_id), ("state", state)):
+        for column, value in (
+            ("env_id", env_id),
+            ("agent_id", agent_id),
+            ("state", state),
+        ):
             if value is not None:
                 clauses.append(f"{column} = ?")
                 params.append(value)
+        if request_id is not None:
+            clauses.append("request_id = ?")
+            params.append(request_id)
         if currency is not None:
             clauses.append("currency = ?")
             params.append(currency.upper())
