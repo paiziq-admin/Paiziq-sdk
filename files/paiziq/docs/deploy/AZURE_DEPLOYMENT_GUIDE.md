@@ -19,16 +19,18 @@ from the backend; the demo creates that data through the SDK.
 
 ### Completed Azure rollout — 2026-10-03
 
-The initial rollout was verified on 2026-10-03. On 2026-10-04 the subscription
-API reports `Warned`, while Container Apps returns `ManagedClusterSuspended`
-and says the subscription is disabled. The app reports `Failed`, and its
-health endpoint times out. The subscription Owner must resolve the warning
-and restore the suspended compute; hosted deployment cannot currently be
-verified. See [Azure subscription states](https://learn.microsoft.com/en-us/azure/cost-management-billing/manage/subscription-states).
+The initial rollout was verified on 2026-10-03. After the subscription was
+reactivated on 2026-10-04, its original Container Apps environment continued
+returning `ManagedClusterSuspended`. A new Consumption environment and app
+were provisioned with the same image, Azure Files share and runtime keys. The
+original app is stopped to prevent concurrent SQLite writers. The recovered
+app passed all five hosted smoke checks, including dashboard CORS. The
+subscription is now Pay As You Go; CI still needs Owner-granted roles for its
+GitHub identity.
 API base URL:
-`https://paiziq-ingest-dev.whiteforest-4bca54b1.eastus2.azurecontainerapps.io`.
-[API documentation](https://paiziq-ingest-dev.whiteforest-4bca54b1.eastus2.azurecontainerapps.io/docs)
-and [health check](https://paiziq-ingest-dev.whiteforest-4bca54b1.eastus2.azurecontainerapps.io/health).
+`https://paiziq-ingest-dev-recovery.braveflower-350d0c4a.eastus2.azurecontainerapps.io`.
+[API documentation](https://paiziq-ingest-dev-recovery.braveflower-350d0c4a.eastus2.azurecontainerapps.io/docs)
+and [health check](https://paiziq-ingest-dev-recovery.braveflower-350d0c4a.eastus2.azurecontainerapps.io/health).
 Deployment from SDK `Dev` commit `2f4119a` reached these stages:
 
 | Item | Actual state |
@@ -39,9 +41,9 @@ Deployment from SDK `Dev` commit `2f4119a` reached these stages:
 | Image manifest digest | `sha256:69d505b411bac64250e6f488cf907c9826b670d1069d6887b5bbd1d1b7866130` |
 | Database storage | `paiziqdevdata8406cce02`, East US 2, Standard LRS; 5 GiB quota share `paiziq-ingest-data` |
 | Failed environment | `paiziq-dev-env`, Central US; create failed with `AKSCapacityHeavyUsage`; deleted after Azure background cleanup |
-| Replacement environment | `paiziq-dev-env-eastus2`, East US 2; `Succeeded` |
-| Backend app | `paiziq-ingest-dev`; `Succeeded`, one healthy active revision, one replica, one worker; 0.5 vCPU / 1 GiB |
-| Subscription policy | `FreeTrial_2014-09-01`, spending limit `On`; Azure enforces one Container Apps environment globally |
+| Recovered environment | `paiziq-dev-env-recovery-eastus2`, East US 2; `Succeeded`. Original `paiziq-dev-env-eastus2` remains suspended |
+| Backend app | `paiziq-ingest-dev-recovery`; healthy, one replica and worker; 0.5 vCPU / 1 GiB. Original `paiziq-ingest-dev` is stopped |
+| Subscription policy | Pay As You Go, spending limit `Off` |
 | Credentials | Bootstrap, Fernet, repository-only ACR pull, SDK developer and dashboard read-only keys saved in gitignored `deploy/azure/backend.env` with mode `0600`; no keys in this guide |
 | Application records | Organization `org_63703cd5efff6f0db7b5` (`Paiziq`), environment `env_d0f615f491e11933fbed` (`dev`, sandbox), agent `agt_6c16810c442e0e12cedf` (`payment-agent-dev`) |
 | Hosted verification | Smoke 5/5; managed SDK key trace ingest accepted; read key retrieves trace; restart preserves records and keys; Swagger/OpenAPI reachable |

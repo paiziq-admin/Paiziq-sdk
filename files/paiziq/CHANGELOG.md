@@ -9,6 +9,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- 2026-10-04: Point SDK Azure CI at the recovered dev Container App after
+  Azure left the original environment suspended during subscription
+  reactivation. The new app retains the same Azure Files database and runtime
+  keys; the old app is stopped to preserve a single SQLite writer.
+
 - 2026-10-04: Azure CI now discovers the deployed backend hostname and
   dashboard CORS origin after updating the app, so infrastructure recreation
   does not leave hosted smoke checks pointing to deleted resources. Local

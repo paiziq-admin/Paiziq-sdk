@@ -49,7 +49,7 @@ jobs:
       id-token: write
     env:
       AZ_RESOURCE_GROUP: paiziq-dev
-      AZ_APP_NAME: paiziq-ingest-dev
+      AZ_APP_NAME: paiziq-ingest-dev-recovery
       AZ_ACR_NAME: paiziqdevacr8406cce0
       AZ_IMAGE: paiziqdevacr8406cce0.azurecr.io/paiziq-ingest:${{ github.sha }}
       PAIZIQ_DASHBOARD_URL: https://example.invalid # Local image smoke; hosted origin is discovered.
