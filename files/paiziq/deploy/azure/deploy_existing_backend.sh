@@ -5,7 +5,6 @@ set -euo pipefail
 : "${AZ_RESOURCE_GROUP:?AZ_RESOURCE_GROUP is required}"
 : "${AZ_APP_NAME:?AZ_APP_NAME is required}"
 : "${AZ_IMAGE:?AZ_IMAGE is required}"
-: "${PAIZIQ_ENDPOINT:?PAIZIQ_ENDPOINT is required}"
 : "${GITHUB_SHA:?GITHUB_SHA is required}"
 : "${GITHUB_RUN_ID:?GITHUB_RUN_ID is required}"
 : "${GITHUB_RUN_ATTEMPT:?GITHUB_RUN_ATTEMPT is required}"
@@ -34,6 +33,20 @@ done <<< "$revisions"
 az containerapp update --name "$AZ_APP_NAME" --resource-group "$AZ_RESOURCE_GROUP" \
   --image "$AZ_IMAGE" --revision-suffix "ci-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
   --min-replicas 1 --max-replicas 1 --only-show-errors --output none
+
+# Default hostnames change when Terraform recreates the app. Discover the
+# deployed endpoints rather than checking a hostname belonging to a deleted app.
+fqdn="$(az containerapp show --name "$AZ_APP_NAME" --resource-group "$AZ_RESOURCE_GROUP" \
+  --query properties.configuration.ingress.fqdn --output tsv --only-show-errors)"
+if [ -z "$fqdn" ] || [ "$fqdn" = null ]; then
+  echo 'Deployed backend has no public hostname; cannot run hosted smoke checks.' >&2
+  exit 1
+fi
+origins="$(az containerapp show --name "$AZ_APP_NAME" --resource-group "$AZ_RESOURCE_GROUP" \
+  --query "properties.template.containers[0].env[?name=='PAIZIQ_CORS_ORIGINS'].value | [0]" \
+  --output tsv --only-show-errors)"
+export PAIZIQ_ENDPOINT="https://$fqdn"
+export PAIZIQ_DASHBOARD_URL="${origins%%,*}"
 
 for _ in $(seq 1 60); do
   if make ci-smoke; then
