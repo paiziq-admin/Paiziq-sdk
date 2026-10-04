@@ -1,0 +1,30 @@
+# Build context is files/paiziq; keep the image to runtime code only.
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/.hypothesis
+**/.venv
+**/node_modules
+**/.DS_Store
+
+# Tests, docs, local data, and tooling are not shipped in the image.
+sdk/tests
+sdk/examples
+sdk/dist
+sdk/build
+services/ingest/tests
+tests
+docs
+deploy
+.e2e
+*.sqlite
+*.sqlite3
+*.db
+*.log
+.env
+.env.*
+Makefile
+CHANGELOG.md
+AGENTS.md

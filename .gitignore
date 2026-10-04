@@ -38,6 +38,13 @@ pip-wheel-metadata/
 *.manifest
 *.spec
 
+# Local full-stack E2E database
+.e2e/
+.cursor/plans
+
+# Azure deployment configuration with live keys (template: backend.env.example)
+files/paiziq/deploy/azure/backend.env
+
 # Logs and local env
 *.log
 .env

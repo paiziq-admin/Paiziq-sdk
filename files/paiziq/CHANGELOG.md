@@ -9,6 +9,28 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- 2026-10-03: Runnable backend deployment package and Azure guide.
+  Completed `services/ingest/Dockerfile` (installs the local SDK, runs as a
+  non-root user, persistent `/data` SQLite volume, health check) with a
+  single-worker `entrypoint.sh` and a root `.dockerignore`; added
+  `deploy/azure/deploy_backend.sh` (idempotent Azure Container Apps deploy
+  with an Azure Files `nobrl` mount and Container Apps secrets) plus
+  `backend.env.example`; added `scripts/smoke_backend.py` (mirrors the
+  dashboard login probe and CORS preflight) and `scripts/northstar_demo.py`
+  (runs the deterministic payment-agent scenario through the real SDK
+  against a deployed backend, issues a read-only dashboard key, writes a
+  secret-free report); Make targets `docker-build`, `docker-smoke`,
+  `smoke`, `northstar-demo`, `deploy-azure`; deployment lane
+  `tests/test_deploy_package.py`; and
+  `docs/deploy/AZURE_DEPLOYMENT_GUIDE.md` covering backend deployment,
+  publishing the live-data dashboard branch, and running the demo.
+
+- 2026-10-03: Payment-agent full-stack E2E suite: three budgeted backend
+  integration cases, repeatable sandbox seeding, Make startup/verification
+  commands, executed endpoint report, paired dashboard fixture/live lanes,
+  and a reproducible workflow tutorial. SDK event `payload` is now indexed
+  for event search, restoring dashboard correlation to SDK-generated traces.
+
 - Hosted account and subscription commercialization plan (PZ-102):
   organization-as-customer model, OAuth/OIDC account requirement,
   human-versus-machine identity boundary, versioned feature/entitlement

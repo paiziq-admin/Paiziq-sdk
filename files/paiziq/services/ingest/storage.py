@@ -27,6 +27,22 @@ ON CONFLICT(span_id) DO UPDATE SET
 """
 
 
+def _event_body(event: dict[str, Any]) -> dict[str, Any]:
+    """Body indexed for event search.
+
+    The ingest search tests send ``attributes``. The SDK ``Span.add_event``
+    wire form sends ``payload``. An empty attributes object must not hide
+    a payload, or dashboard trace correlation cannot find SDK decisions.
+    """
+    attributes = event.get("attributes")
+    if isinstance(attributes, dict) and attributes:
+        return attributes
+    payload = event.get("payload")
+    if isinstance(payload, dict):
+        return payload
+    return {}
+
+
 class IngestStore:
     def __init__(self, path: str = ":memory:") -> None:
         self._conn = sqlite3.connect(path, check_same_thread=False)
@@ -62,7 +78,7 @@ class IngestStore:
                         (
                             s["trace_id"], s["span_id"], event.get("name", "event"),
                             event.get("kind", "event"),
-                            json.dumps(event.get("attributes", {})),
+                            json.dumps(_event_body(event)),
                             event.get("ts_ms") or s.get("start_ms"),
                         ),
                     )

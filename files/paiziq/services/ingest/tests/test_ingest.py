@@ -97,10 +97,14 @@ def test_sdk_wire_contract_roundtrip():
     from paiziq.tracing.tracer import Span  # noqa: E402
 
     s = Span(name="paiziq.execute_payment", trace_id="tr-sdk")
-    s.add_event("four_way_audit", {"checks": []})
+    s.add_event("four_way_audit", {"checks": [], "marker": "sdkpayloadtoken"})
     s.end("ok")
     r = client.post("/v1/traces", json={"spans": [s.to_dict()]}, headers=AUTH)
     assert r.status_code == 200
     assert r.json()["accepted"] == 1
     spans = client.get("/v1/traces/tr-sdk", headers=AUTH).json()["spans"]
     assert spans[0]["events"][0]["name"] == "four_way_audit"
+    # SDK events use `payload`, not `attributes`. Search must still index them.
+    found = client.get("/v1/search/events?q=sdkpayloadtoken", headers=AUTH)
+    assert found.status_code == 200
+    assert found.json()["data"][0]["trace_id"] == "tr-sdk"

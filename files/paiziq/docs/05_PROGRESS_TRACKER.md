@@ -4,7 +4,7 @@ Human-readable implementation status against
 `03_BUILD_DEPLOY_PLAN.md`. Update this file in the same PR as the
 change it describes (see `04_DEVELOPER_GUIDE.md`, section 3).
 
-**Last updated:** 2026-07-26 · **Current version:** 0.2.0
+**Last updated:** 2026-10-03 · **Current version:** 0.2.0
 
 Legend: ✅ done · 🔄 in progress · ⬜ not started
 
@@ -55,6 +55,8 @@ Legend: ✅ done · 🔄 in progress · ⬜ not started
 
 | Item | Status | Where / Notes |
 | --- | --- | --- |
+| Payment-agent full-stack E2E suite and tutorial | ✅ | `docs/e2e/`, `tests/e2e_support/`, Make E2E commands, dashboard fixture/service lanes |
+| Backend deployment package (container, Azure Container Apps script, smoke test, Northstar demo runner) and deployment guide | ✅ package · ⬜ Azure rollout | `services/ingest/Dockerfile`, `entrypoint.sh`, `deploy/azure/`, `scripts/smoke_backend.py`, `scripts/northstar_demo.py`, `docs/deploy/AZURE_DEPLOYMENT_GUIDE.md`; `make docker-smoke` verified locally, `make deploy-azure` not yet executed against the subscription |
 | Project rules for collaborators/agents | ✅ | `.cursor/rules/`, `AGENTS.md` |
 | Developer documentation site (design handoff) | ✅ | `docs/site/` — serve with `python3 -m http.server` |
 
@@ -189,3 +191,5 @@ capability is shipped.
 | 2026-07-26 | unreleased | Final `make check` after PZ-101 and dashboard-query hardening (181 SDK + 124 ingest tests, generated contract, 3 examples); mypy clean (25 files) | all passed |
 | 2026-07-26 | unreleased | Final backend integrity audit: 116 non-network ingest tests; 47 focused review/payment/OpenAPI tests; 4 OpenAPI-sync tests; targeted Ruff; `git diff --check` | all passed |
 | 2026-07-26 | unreleased | `make check` after PZ-102 account/subscription planning docs (Ruff, 181 SDK tests, 124 ingest tests, 3 examples) | all passed |
+| 2026-10-03 | unreleased | Payment-agent E2E: `make check` (181 SDK + 127 ingest tests, 3 examples), focused I1–I3, 40-response endpoint verification, targeted Ruff, diff check; dashboard 6 fixture + 1 live browser test and `npm run check` (11 unit tests); runnable tutorial | all passed |
+| 2026-10-03 | unreleased | Deployment package: `make check` (181 SDK + 141 ingest tests incl. 14 deployment-lane tests, 3 examples); `make docker-smoke` 5/5 against the production-mode image; Northstar demo run against the container (approved / needs_review / rejected, read-only key, CORS allowed); `bash -n deploy_backend.sh`; targeted Ruff | all passed |
