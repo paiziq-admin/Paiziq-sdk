@@ -621,3 +621,7 @@ Or `IMAGE_TAG=<previous sha> ./deploy/azure/deploy_backend.sh --skip-build`.
 - Costs: Basic ACR, Standard_LRS storage, a Consumption-plan Container App with
   `min=1` (always on, roughly a few tens of USD per month), and the existing
   Static Web App.
+
+### Terraform environment recreation
+
+The infrastructure lifecycle is managed in [Paiziq-Infra](https://github.com/paiziq-admin/Paiziq-Infra). Its manual workflows create or delete the entire dev/prod application group. Runtime deployment uses one SQLite writer; do not run SDK CI concurrently with a lifecycle workflow. After updating the backend, `make ci-deploy-azure` discovers its current hostname and first configured dashboard CORS origin directly from Azure. Hosted smoke checks therefore follow recreated resources rather than old default URLs. After dev recreation, run the infrastructure repository's `scripts/configure-app-repos.sh` locally to refresh the dashboard CI deployment token.

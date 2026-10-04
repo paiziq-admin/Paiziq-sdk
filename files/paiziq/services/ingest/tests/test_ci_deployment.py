@@ -29,18 +29,27 @@ def test_ci_deployment_waits_for_all_old_writers_and_retains_configuration(tmp_p
         "args = sys.argv[1:]\n"
         "with open(os.environ['CI_TEST_CALLS'], 'a') as f: f.write(json.dumps(args) + '\\n')\n"
         "if args[:3] == ['containerapp', 'revision', 'list']: print('old-a\\nold-b')\n"
+        "if args[:2] == ['containerapp', 'show'] and '--query' in args:\n"
+        "    print('recreated.example.invalid' if 'ingress.fqdn' in args[args.index('--query')+1] else 'https://dashboard-new.example.invalid,https://second.example.invalid')\n"
         "if args[:3] == ['containerapp', 'replica', 'list']:\n"
         "    print('1' if os.environ['CI_TEST_STUCK'] == '1' else '0')\n"
     )
     fake_az.chmod(0o755)
     for name in ("make", "sleep"):
         mock = tmp_path / name
-        mock.write_text("#!/bin/sh\nexit 0\n")
+        mock.write_text(
+            f"#!{sys.executable}\n"
+            "import json, os, sys\n"
+            "if sys.argv[1:] == ['ci-smoke']:\n"
+            "    with open(os.environ['CI_TEST_SMOKE'], 'w') as f:\n"
+            "        json.dump({k: os.environ.get(k) for k in ('PAIZIQ_ENDPOINT', 'PAIZIQ_DASHBOARD_URL')}, f)\n"
+        )
         mock.chmod(0o755)
     env = {
         **os.environ,
         "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
         "CI_TEST_CALLS": str(calls),
+        "CI_TEST_SMOKE": str(tmp_path / "smoke.json"),
         "CI_TEST_STUCK": "1" if stuck else "0",
         "AZ_RESOURCE_GROUP": "test-rg",
         "AZ_APP_NAME": "test-app",
@@ -61,6 +70,9 @@ def test_ci_deployment_waits_for_all_old_writers_and_retains_configuration(tmp_p
         assert not updates
         return
     assert result.returncode == 0, result.stderr
+    smoke = json.loads((tmp_path / "smoke.json").read_text())
+    assert smoke["PAIZIQ_ENDPOINT"] == "https://recreated.example.invalid"
+    assert smoke["PAIZIQ_DASHBOARD_URL"] == "https://dashboard-new.example.invalid"
     assert len(updates) == 1
     update = updates[0]
     assert update[update.index("--image") + 1] == env["AZ_IMAGE"]

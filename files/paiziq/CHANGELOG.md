@@ -9,6 +9,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- 2026-10-04: Azure CI now discovers the deployed backend hostname and
+  dashboard CORS origin after updating the app, so infrastructure recreation
+  does not leave hosted smoke checks pointing to deleted resources. Local
+  container smoke uses an isolated test origin. Regression tests verify that
+  live discovery overrides stale endpoint values while preserving runtime
+  secrets, volumes and the single-writer deployment order.
+
 - 2026-10-04: Resolved Azure deployment PR conflicts against the Phase 0
   development code, preserving CI and procurement/Phase 0 demo targets.
   Removed committed conflict markers from the Makefile and documentation;

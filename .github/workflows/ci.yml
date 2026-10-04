@@ -52,8 +52,7 @@ jobs:
       AZ_APP_NAME: paiziq-ingest-dev
       AZ_ACR_NAME: paiziqdevacr8406cce0
       AZ_IMAGE: paiziqdevacr8406cce0.azurecr.io/paiziq-ingest:${{ github.sha }}
-      PAIZIQ_ENDPOINT: https://paiziq-ingest-dev.whiteforest-4bca54b1.eastus2.azurecontainerapps.io
-      PAIZIQ_DASHBOARD_URL: https://brave-river-0a6dd1310.5.azurestaticapps.net
+      PAIZIQ_DASHBOARD_URL: https://example.invalid # Local image smoke; hosted origin is discovered.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
