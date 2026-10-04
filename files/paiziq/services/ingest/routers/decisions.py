@@ -13,14 +13,19 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query
-from paiziq import PaymentRequest
-from paiziq.engine import DecisionEngine
 from pydantic import BaseModel, Field
 
 from audit import AuditLog
-from auth import actor_for, require_ingest_key, require_read_key, settings
+from auth import (
+    AuthContext,
+    actor_for,
+    require_ingest_context,
+    require_read_context,
+    settings,
+)
 from deps import (
     get_audit_log,
+    get_execution_store,
     get_decision_store,
     get_event_router,
     get_payment_store,
@@ -28,7 +33,8 @@ from deps import (
     get_review_store,
 )
 from envelope import ApiError, list_meta, ok
-from policy_doc import to_policy
+from routers.payments import _authorize_env
+from stores.executions import ExecutionStore
 from event_router import EventRouter
 from stores.decisions import DecisionStore, ReviewStore
 from stores.payments import PaymentStore
@@ -53,39 +59,31 @@ class DecisionCreate(BaseModel):
 @router.post("/v1/decisions")
 def create_decision(
     body: DecisionCreate,
-    api_key: str = Depends(require_ingest_key),
+    context: AuthContext = Depends(require_ingest_context),
     payments: PaymentStore = Depends(get_payment_store),
     decisions: DecisionStore = Depends(get_decision_store),
     reviews: ReviewStore = Depends(get_review_store),
     policies: PolicyStore = Depends(get_policy_store),
+    executions: ExecutionStore = Depends(get_execution_store),
     router_events: EventRouter = Depends(get_event_router),
     audit: AuditLog = Depends(get_audit_log),
 ) -> dict[str, Any]:
     payment = payments.get(body.payment_id)
     if payment is None:
         raise ApiError(404, "not_found", f"payment not found: {body.payment_id}")
+    _authorize_env(context, payment["env_id"])
     if payment["state"] not in _EVALUABLE_STATES:
         raise ApiError(
-            409, "invalid_state_transition",
+            409,
+            "invalid_state_transition",
             f"payment in state {payment['state']!r} cannot be evaluated",
         )
 
     active = policies.active_for_env(payment["env_id"])
     policy_version = active["version"] if active else None
-    engine = DecisionEngine(policy=to_policy(active["document"]) if active else None)
-    verdict = engine.evaluate(
-        PaymentRequest(
-            agent_id=payment["agent_id"],
-            principal_id=payment["principal_id"],
-            merchant=payment["merchant"],
-            amount=payment["amount"],
-            currency=payment["currency"],
-            intent_description=payment["intent_description"],
-            request_id=payment["id"],
-        )
-    )
+    request, policy, policy_hash, verdict, _ = executions.evaluate(payment, active)
 
-    actor = actor_for(api_key)
+    actor = actor_for(context)
     target_state = _VERDICT_TO_STATE[verdict.status.value]
     if (
         payment["state"] == "needs_review"
@@ -99,8 +97,14 @@ def create_decision(
         )
 
     record = decisions.create(
-        payment["id"], policy_version, verdict.status.value,
-        list(verdict.reasons), [f.value for f in verdict.risk_flags],
+        payment["id"],
+        policy_version,
+        verdict.status.value,
+        list(verdict.reasons),
+        [f.value for f in verdict.risk_flags],
+        save_context=lambda did: executions.save_decision_context(
+            did, request, policy, policy_hash, payment, verdict.evaluation_context
+        ),
     )
 
     if payment["state"] != target_state:
@@ -112,44 +116,63 @@ def create_decision(
         review = reviews.open(payment["id"], record["id"], settings.review_sla_ms)
 
     router_events.dispatch(
-        payment["env_id"], "decision.created",
-        {"decision_id": record["id"], "payment_id": payment["id"],
-         "verdict": record["verdict"], "policy_version": policy_version},
+        payment["env_id"],
+        "decision.created",
+        {
+            "decision_id": record["id"],
+            "payment_id": payment["id"],
+            "verdict": record["verdict"],
+            "policy_version": policy_version,
+        },
     )
     if verdict.status.value == "needs_review":
         router_events.dispatch(
-            payment["env_id"], "review.assigned",
-            {"review_id": review["id"] if review else None, "payment_id": payment["id"],
-             "decision_id": record["id"]},
+            payment["env_id"],
+            "review.assigned",
+            {
+                "review_id": review["id"] if review else None,
+                "payment_id": payment["id"],
+                "decision_id": record["id"],
+            },
         )
 
     audit.record(
-        actor, "decision.create", record["id"],
-        {"payment_id": payment["id"], "verdict": record["verdict"],
-         "review_id": review["id"] if review else None},
+        actor,
+        "decision.create",
+        record["id"],
+        {
+            "payment_id": payment["id"],
+            "verdict": record["verdict"],
+            "review_id": review["id"] if review else None,
+        },
     )
     return ok({**record, "review_id": review["id"] if review else None})
 
 
 @router.get("/v1/decisions")
 def list_decisions(
-    api_key: str = Depends(require_read_key),
+    context: AuthContext = Depends(require_read_context),
     payment_id: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     decisions: DecisionStore = Depends(get_decision_store),
 ) -> dict[str, Any]:
-    items, total = decisions.list(payment_id, limit, offset)
+    items, total = decisions.list(payment_id, limit, offset, env_id=context.env_id)
     return ok(items, meta=list_meta(total, limit, offset))
 
 
 @router.get("/v1/decisions/{decision_id}")
 def get_decision(
     decision_id: str,
-    api_key: str = Depends(require_read_key),
+    context: AuthContext = Depends(require_read_context),
     decisions: DecisionStore = Depends(get_decision_store),
 ) -> dict[str, Any]:
     record = decisions.get(decision_id)
+    if record is not None and context.env_id is not None:
+        from deps import get_payment_store
+
+        payment = get_payment_store().get(record["payment_id"])
+        _authorize_env(context, payment["env_id"])
     if record is None:
         raise ApiError(404, "not_found", f"decision not found: {decision_id}")
     return ok(record)

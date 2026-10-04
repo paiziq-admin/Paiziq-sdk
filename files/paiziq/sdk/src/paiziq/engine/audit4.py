@@ -33,10 +33,11 @@ class FourWayAuditor:
         request: PaymentRequest,
         decision: Decision,
         reviewed_snapshot: Optional[dict] = None,
+        now_ms: Optional[int] = None,
     ) -> FourWayAuditResult:
         checks = [
             self._identity(request),
-            self._intent(request),
+            self._intent(request, now_ms=now_ms),
             self._policy(decision),
             self._transaction(request, decision, reviewed_snapshot),
         ]
@@ -60,12 +61,12 @@ class FourWayAuditor:
         )
 
     # 2 ─ Intent
-    def _intent(self, request: PaymentRequest) -> AuditCheck:
+    def _intent(self, request: PaymentRequest, now_ms: Optional[int] = None) -> AuditCheck:
         m = request.mandate
         if m is None:
             return AuditCheck(AuditDimension.INTENT, True, "No mandate attached; intent bound only by policy")
         problems: list[str] = []
-        if m.expires_at_ms is not None and time.time() * 1000 > m.expires_at_ms:
+        if m.expires_at_ms is not None and (now_ms if now_ms is not None else time.time() * 1000) >= m.expires_at_ms:
             problems.append("mandate expired")
         if m.max_amount is not None and request.amount > m.max_amount:
             problems.append(f"amount {request.amount:.2f} exceeds mandate cap {m.max_amount:.2f}")
@@ -119,11 +120,5 @@ class FourWayAuditor:
 
 def transaction_snapshot(request: PaymentRequest) -> dict:
     """Canonical fields captured at review time and re-verified at execution."""
-    return {
-        "merchant": request.merchant.strip().lower(),
-        "amount": round(request.amount, 2),
-        "currency": request.currency.upper(),
-        "category": request.category.strip().lower(),
-        "principal_id": request.principal_id,
-        "agent_id": request.agent_id,
-    }
+    from ..execution import request_snapshot
+    return request_snapshot(request)

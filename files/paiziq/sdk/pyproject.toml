@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "paiziq"
-version = "0.2.0"
+version = "0.3.0"
 description = "Paiziq Agent Audit Tracer SDK — verifiable-intent auditing, 4-way match policy, and payment decisioning for AI payment agents."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -26,7 +26,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-langchain = ["langchain-core>=0.2"]
+langchain = ["langchain-core>=0.3", "langchain-openai>=0.2"]
 openai = ["openai>=1.30"]
 http = ["httpx>=0.27"]
 redis = ["redis>=5"]
@@ -38,6 +38,8 @@ dev = [
   "mypy>=1.10",
   "build>=1.2",
   "hypothesis>=6",
+  "langchain-core>=0.3",
+  "langchain-openai>=0.2",
 ]
 
 [project.scripts]

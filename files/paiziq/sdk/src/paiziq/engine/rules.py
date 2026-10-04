@@ -9,6 +9,7 @@ rejected > needs_review > approved.
 from __future__ import annotations
 
 import re
+from decimal import Decimal
 from typing import Optional, Protocol
 
 from ..models import DecisionStatus, PaymentRequest, RiskFlag, RuleResult
@@ -121,23 +122,24 @@ class BudgetRule:
         status = APPROVED
 
         for label, budget, spent in (
-            ("daily", policy.daily_budget, self.tracker.daily_spend(request.agent_id)),
-            ("monthly", policy.monthly_budget, self.tracker.monthly_spend(request.agent_id)),
+            ("daily", policy.daily_budget, self.tracker.daily_spend(request.agent_id, request.currency)),
+            ("monthly", policy.monthly_budget, self.tracker.monthly_spend(request.agent_id, request.currency)),
         ):
             if budget is None:
                 continue
-            projected = spent + request.amount
+            projected = Decimal(str(spent)) + Decimal(str(request.amount))
+            budget_decimal = Decimal(str(budget))
             details[f"{label}_spent"] = round(spent, 2)
             details[f"{label}_budget"] = budget
-            details[f"{label}_projected"] = round(projected, 2)
-            if projected > budget:
+            details[f"{label}_projected"] = float(projected)
+            if projected > budget_decimal:
                 status = REJECTED
                 flags.append(RiskFlag.BUDGET_EXCEEDED)
                 reasons.append(
                     f"Payment would exceed {label} budget: "
                     f"{projected:.2f} > {budget:.2f} (spent {spent:.2f})"
                 )
-            elif projected > budget * policy.budget_warning_ratio and status is not REJECTED:
+            elif projected > budget_decimal * Decimal(str(policy.budget_warning_ratio)) and status is not REJECTED:
                 status = REVIEW
                 flags.append(RiskFlag.BUDGET_NEAR_LIMIT)
                 reasons.append(
@@ -177,7 +179,7 @@ class ReviewRequiredRule:
             reasons.append(f"Currency '{request.currency}' is outside permitted set")
 
         if policy.max_tx_per_hour is not None:
-            count = self.tracker.hourly_tx_count(request.agent_id)
+            count = self.tracker.hourly_tx_count(request.agent_id, request.currency)
             if count >= policy.max_tx_per_hour:
                 status = REVIEW
                 flags.append(RiskFlag.VELOCITY_ANOMALY)

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
-__all__ = ['AgentPatch', 'AgentRegister', 'DecisionCreate', 'DraftUpdate', 'EndpointCreate', 'EndpointPatch', 'EnvironmentCreate', 'HTTPValidationError', 'KeyCreate', 'KeyRotate', 'NotificationIn', 'OrgCreate', 'PaymentCreate', 'PolicyCreate', 'ReviewAction', 'ReviewAssignment', 'ReviewEscalation', 'ReviewRelease', 'RollbackRequest', 'SimulatePayment', 'SimulateRequest', 'SpanIn', 'TraceBatch', 'TransitionIn', 'ValidationError']
+__all__ = ['AgentPatch', 'AgentRegister', 'DecisionCreate', 'DraftUpdate', 'EndpointCreate', 'EndpointPatch', 'EnvironmentCreate', 'ExecutionClaim', 'ExecutionReconcile', 'ExecutionReport', 'HTTPValidationError', 'KeyCreate', 'KeyRotate', 'NotificationIn', 'OrgCreate', 'PaymentCreate', 'PolicyCreate', 'ReviewAction', 'ReviewAssignment', 'ReviewEscalation', 'ReviewRelease', 'RollbackRequest', 'SimulatePayment', 'SimulateRequest', 'SpanIn', 'TraceBatch', 'TransitionIn', 'ValidationError']
 
 
 class AgentPatch(TypedDict, total=False):
@@ -61,6 +61,32 @@ class EnvironmentCreate(TypedDict):
     kind: str
 
 
+class ExecutionClaim(TypedDict, total=False):
+    request_digest: str | None
+
+
+class _ExecutionReconcileRequired(TypedDict):
+    status: str
+    evidence: dict[str, Any]
+    reason: str
+
+
+class ExecutionReconcile(_ExecutionReconcileRequired, total=False):
+    gateway_reference: str | None
+    error: str | None
+
+
+class _ExecutionReportRequired(TypedDict):
+    claim_token: str
+    status: str
+
+
+class ExecutionReport(_ExecutionReportRequired, total=False):
+    gateway_reference: str | None
+    error: str | None
+    evidence: dict[str, Any]
+
+
 class HTTPValidationError(TypedDict, total=False):
     detail: list[ValidationError]
 
@@ -107,6 +133,9 @@ class PaymentCreate(_PaymentCreateRequired, total=False):
     currency: str
     intent_description: str
     request_id: str | None
+    category: str
+    mandate: dict[str, Any] | None
+    metadata: dict[str, Any]
 
 
 class _PolicyCreateRequired(TypedDict):

@@ -234,6 +234,11 @@ class ExecutionResult:
     gateway_reference: Optional[str] = None
     error: Optional[str] = None
     executed_at_ms: int = field(default_factory=_now_ms)
+    status: str = "blocked"
+    execution_id: Optional[str] = None
+    provider_idempotency_key: Optional[str] = None
+    replayed: bool = False
+    accounting_pending: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -244,6 +249,11 @@ class ExecutionResult:
             "gateway_reference": self.gateway_reference,
             "error": self.error,
             "executed_at_ms": self.executed_at_ms,
+            "status": self.status,
+            "execution_id": self.execution_id,
+            "provider_idempotency_key": self.provider_idempotency_key,
+            "replayed": self.replayed,
+            "accounting_pending": self.accounting_pending,
         }
 
 

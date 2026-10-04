@@ -2,6 +2,49 @@
 
 **Scope:** Backend SDK and its path to production, plus the planned hosted account/subscription program. The shipped dashboard frontend remains a companion workstream/repository consuming the contracts defined here.
 
+## Site parity program — Phase 0 execution and evidence foundation
+
+Completed locally 2026-10-04; SDK 0.3.0 and dashboard gates passed. This is a separate program from the historical phases
+below. Phase 0 implements safe payment execution and durable evidence before
+economic scores, compute adapters, outcomes and policy suggestions are added.
+Task status and the frontend/backend to-do list live in
+`05_PROGRESS_TRACKER.md`, items SP0-01 through SP0-14.
+
+The SDK and hosted service share a stdlib SQLite ledger algorithm. It scopes
+history by organization, environment, agent and currency, claims each logical execution,
+and reserves budget atomically. Request and policy snapshots bind the
+authorization. Unknown provider outcomes retain exposure. Reconciliation
+requires evidence rather than a blind retry. Business events and publication
+records persist independently of optional trace exporters.
+
+The SDK supports an explicit hosted execution adapter. A trace endpoint
+alone does not select hosted authorization. The hosted adapter must use the
+same logical IDs and server ledger as the execution API. Existing local
+callers keep an explicit local authority, with durable storage available for
+restart and multi-process protection.
+
+The dashboard reads execution evidence for each payment. It distinguishes
+not started, reserved/in progress, confirmed, failed, unknown and unavailable
+evidence. It shows currency-aware exposure, immutable authorization details
+and execution events. It does not supply a manual success assertion or a
+retry button for uncertain payments.
+
+Delivery order inside Phase 0:
+
+1. Agree the ledger, provider and HTTP contracts; create tracker items.
+2. Implement SDK and service foundations in parallel with the frontend.
+3. Connect the hosted SDK adapter and durable publication path.
+4. Test repeat/concurrent execution, the two-$60/$100 budget case, prior
+   hosted history, timeout/restart, scope boundaries, changed authorization,
+   publication replay and dashboard unknown/unavailable states.
+5. Run `make check`, SDK typing, generated-contract checks, dashboard quality
+   and browser gates. Update the tracker only with actual gate results.
+
+Version target is SDK 0.3.0. Additive persistence and readers precede new
+producers. Existing HTTP idempotency behavior needs an explicit compatibility
+path if scoped payload-conflict semantics are selected. No production
+deployment or real gateway transaction is included in the local test gate.
+
 ---
 
 ## Phase 0 — Production Scaffold ✅ (delivered in this repo)

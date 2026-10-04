@@ -1,6 +1,6 @@
 """Paiziq happy-path example — runs offline with the mock gateway.
 
-    python examples/happy_path.py
+    python3 examples/happy_path.py
 """
 
 from paiziq import Mandate, PaiziqSDK, PaymentPolicy, PaymentRequest
@@ -46,7 +46,13 @@ print(f"risk flags: {[f.value for f in decision.risk_flags]}")
 # 5. Execute → 4-way audit, then gateway charge.
 result = sdk.execute_payment(request)
 print(f"executed:   {result.executed} (ref={result.gateway_reference})")
-print(f"4-way:      {[ (c.dimension.value, c.passed) for c in decision.four_way_audit.checks ]}")
+# The review remains the original decision. Read execution checks from durable
+# evidence instead of expecting execute_payment to modify a returned object.
+reserved = next(event for event in sdk.get_execution_events(request.request_id)
+                if event["event_type"] == "execution_reserved")
+checks = reserved["payload"]["context"]["four_way_audit"]
+print(f"4-way:      {[(check['dimension'], check['passed']) for check in checks]}")
+assert result.executed and all(check["passed"] for check in checks)
 
 # 6. Audit trail — everything is on the record.
 for event in sdk.get_audit_trail(request.request_id):

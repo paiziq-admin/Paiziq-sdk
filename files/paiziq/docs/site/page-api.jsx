@@ -24,18 +24,29 @@ function PageApi() {
     budget_tracker=None,          # BudgetTracker
     service_name="payment-agent",
     require_review_approval=True, # fail closed on needs_review
+    failure_mode=FailureMode.FAIL_CLOSED,
+    execution_ledger=None,       # default: in-memory SQLiteExecutionLedger
+    org_id="local", env_id="local",
+    policy_version="local",
+    clock=None,                  # optional epoch-millisecond clock
+    review_ttl_ms=900_000,        # 15-minute local approval lifetime
+    evidence_ledger=None,        # optional local review evidence store
 )`} />
       <div className="params">
         <Param name="review_payment(request)" type="→ Decision" required desc="Evaluate a PaymentRequest against the policy" defaultOpen>
           <p className="pdetail">Runs every rule, records an <code>AuditRecord</code>, emits a span, and fires notifiers. Pure read — never moves money.</p>
         </Param>
-        <Param name="approve_review(request_id, approver)" type="→ Decision" desc="Human approval for a held payment">
-          <p className="pdetail">Converts a <code>needs_review</code> decision to <code>approved</code> and records the override with the approver's identity.</p>
+        <Param name="approve_review(request_id, reviewer_id)" type="→ None" desc="Human approval for the current local review">
+          <p className="pdetail">Appends an approval for one unexpired request and policy revision. The stored decision remains immutable. Hosted holds require the service review API.</p>
         </Param>
         <Param name="execute_payment(request)" type="→ ExecutionResult" desc="4-way match, then charge via the gateway">
-          <p className="pdetail">Re-verifies identity, intent, policy, and transaction. On pass, calls the gateway and returns <code>executed=True</code> with a <code>gateway_reference</code>.</p>
+          <p className="pdetail">Rechecks request, policy, mandate and current history, then reserves capacity before calling the gateway. Repeated IDs return their original execution. Unknown results keep their reservation. A confirmed provider response survives a failed ledger write as <code>accounting_pending=True</code>.</p>
         </Param>
-        <Param name="get_audit_trail(request_id)" type="→ list[AuditRecord]" desc="Append-only history for one request" />
+        <Param name="reconcile_payment(request_id, *, outcome=None)" type="→ ExecutionResult" desc="Resolve a receipt without charging">
+          <p className="pdetail">Queries <code>gateway.lookup(key)</code>, or accepts a trusted <code>GatewayOutcome</code>. Unknown evidence keeps exposure held. Hosted reconciliation requires admin access and evidence.</p>
+        </Param>
+        <Param name="get_execution_events(request_id=None, limit=100)" type="→ list[dict]" desc="Local durable business evidence" />
+        <Param name="get_audit_trail(request_id=None, limit=100)" type="→ list[dict]" desc="Optional append-only audit projection" />
         <Param name="shutdown()" type="→ None" desc="Flush exporters and release resources" />
       </div>
 
@@ -48,7 +59,7 @@ function PageApi() {
         <Param name="currency" type="str" desc='ISO 4217 code, default "USD"' />
         <Param name="category" type="str" desc="Spend category for policy rules" />
         <Param name="intent_description" type="str" desc="The agent's stated reason — auditable" />
-        <Param name="mandate" type="Mandate" desc="Optional signed authorization from the principal" />
+        <Param name="mandate" type="Mandate" desc="Optional principal authorization data; signature verification is not implemented" />
         <Param name="metadata" type="dict" desc="Free-form context attached to the audit trail" />
       </div>
 
@@ -72,7 +83,7 @@ decision.status          # DecisionStatus.APPROVED | NEEDS_REVIEW | REJECTED
 decision.reasons         # ["amount $49.99 within review threshold", …]
 decision.risk_flags      # [RiskFlag.UNKNOWN_MERCHANT, …]
 decision.rule_results    # per-rule verdicts, in evaluation order
-decision.four_way_audit  # snapshot used by execute_payment()
+decision.four_way_audit  # optional field; execution does not mutate this review
 decision.decided_at_ms   # epoch milliseconds`} />
 
       <H2 id="errors" n="05">Errors</H2>
@@ -81,6 +92,33 @@ decision.decided_at_ms   # epoch milliseconds`} />
           <p className="pdetail">Raised by <code>guard_tool_call</code>, <code>instrument_payment_tool</code>, and the LangChain handler when <code>enforce=True</code>. Carries the <code>Decision</code> so callers can show reasons.</p>
         </Param>
       </div>
+
+      <H2 id="execution" n="06">Execution authority</H2>
+      <p>
+        In 0.3.0, <code>SQLiteExecutionLedger("payments.sqlite")</code> shares durable claims
+        across local workers. The default in-memory ledger lasts for one process lifetime.
+        <code> HostedExecutionLedger(transport, org_id=..., env_id=...)</code> selects the
+        server policy and budget authority explicitly. A trace endpoint does not select it.
+        Budgets are scoped by organization, environment, agent and currency. No FX conversion occurs.
+      </p>
+      <p>
+        <code>ExecutionResult.status</code> is blocked, reserved, submitted, confirmed, failed,
+        or unknown. It also exposes <code>execution_id</code>, <code>provider_idempotency_key</code>,
+        <code> replayed</code> and <code>accounting_pending</code>. Keep one request ID per logical
+        action. Do not use a new ID to retry an unknown charge.
+      </p>
+      <p>
+        Optional gateway methods <code>charge_idempotent(request, key)</code> and
+        <code> lookup(key)</code> support provider deduplication and receipt recovery.
+        <code> GatewayOutcome</code> carries confirmed, failed or unknown evidence.
+        <code> GatewayDeclined</code> means the provider confirms no side effect.
+        Other provider exceptions are unknown. Legacy gateways cannot promise automatic recovery.
+      </p>
+      <p>
+        Hosted evidence is available at <code>GET /v1/payments/&#123;payment_id&#125;/execution</code>.
+        The claim, report and reconcile POST routes extend that path. State changes and business
+        events commit together; webhook consumers must deduplicate stable event IDs.
+      </p>
     </>
   );
 }

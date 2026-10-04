@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional, Protocol
 
 from ..models import AuditRecord, PaymentRequest
+from ..execution import GatewayDeclined, GatewayOutcome
 from .postgres import PostgresAuditStore
 
 __all__ = [
@@ -99,9 +100,22 @@ class MockGateway:
     def __init__(self, fail: bool = False) -> None:
         self.fail = fail
         self.charges: list[PaymentRequest] = []
+        self._receipts: dict[str, str] = {}
+        self._lock = threading.RLock()
 
     def charge(self, request: PaymentRequest) -> str:
         if self.fail:
-            raise RuntimeError("mock gateway declined the charge")
+            raise GatewayDeclined("mock gateway declined the charge")
         self.charges.append(request)
         return f"mock_{uuid.uuid4().hex[:12]}"
+
+    def charge_idempotent(self, request: PaymentRequest, idempotency_key: str) -> str:
+        with self._lock:
+            if idempotency_key not in self._receipts:
+                self._receipts[idempotency_key] = self.charge(request)
+            return self._receipts[idempotency_key]
+
+    def lookup(self, idempotency_key: str) -> GatewayOutcome:
+        with self._lock:
+            reference = self._receipts.get(idempotency_key)
+            return GatewayOutcome("confirmed", reference) if reference else GatewayOutcome("unknown")

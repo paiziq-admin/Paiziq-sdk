@@ -82,6 +82,35 @@ default fail-closed), `paiziq.debug()` + `log_event` structured logging
 with secret redaction, and `verify_webhook_signature` /
 `sign_webhook_payload` (HMAC-SHA256 with replay-window check).
 
+## Execution authority (0.3.0)
+
+`execute_payment()` reserves capacity before it calls the provider. A
+repeated request ID returns its first execution. An unknown provider result
+keeps its reservation and requires receipt reconciliation; it does not permit
+another charge. Request and policy changes invalidate old review approvals.
+
+The default ledger is in memory. For restart durability, pass
+`execution_ledger=SQLiteExecutionLedger("payments.sqlite")` and explicit
+`org_id`/`env_id`. For shared hosted policy and budget control, pass
+`HostedExecutionLedger(transport, org_id=..., env_id=...)`. All workers for
+one budget must use the same authority. A `dashboard_endpoint` only configures
+trace delivery. See the [execution and recovery guide](docs/04_DEVELOPER_GUIDE.md#execution-authority-and-recovery-sdk-030).
+
+`result.status` identifies confirmed, failed, or unresolved execution;
+`accounting_pending` preserves a known provider result when a ledger write
+fails. `reconcile_payment(request_id)` checks receipts without charging.
+Legacy gateways remain supported, but cannot promise provider-side
+deduplication or automatic recovery unless they implement idempotency/lookup.
+
+Run `make phase0-demo` against a local ingest service to create real backend
+evidence with mock providers. The dashboard shows status, budget reservations,
+snapshots and events. Score, economics, compute and outcome features belong
+to later parity phases.
+
+The reservation and duplicate-execution guarantees apply to `execute_payment()`
+and the hosted execution protocol. Framework wrappers that only review a
+tool call must route the actual charge through that managed path.
+
 ## Framework integrations
 
 **Any framework** — wrap the payment tool:

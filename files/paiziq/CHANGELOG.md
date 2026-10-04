@@ -9,6 +9,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+<<<<<<< Updated upstream
 - 2026-10-03: Root-level SDK CI and automatic Azure backend deployment for
   pushes/merges to `main`, with `make check`, distribution build, container
   smoke and hosted smoke gates. Uses a main-only GitHub OIDC identity and
@@ -17,6 +18,20 @@ adheres to [Semantic Versioning](https://semver.org/).
   Completed CI runs notify contributors/collaborators in a GitHub results
   thread. `main` and `Dev` use the development tree; no main-only files are
   imported. Owner-granted Azure roles are required for backend deployment.
+=======
+- 2026-10-04: The procurement agent delivers review and rejection alerts to
+  `POST /v1/notifications`, so they appear on the dashboard Alerts screen
+  instead of only in the process log.
+
+- 2026-10-04: LangChain procurement agent (`sdk/examples/procurement_agent.py`).
+  A tool-calling agent buys a company catalog; PaiziqSDK enforces a published
+  procurement policy (approve under $250, review above it, reject the
+  blocklisted vendor), charges the mock gateway only after the 4-way audit,
+  and exports the decision trace for the dashboard. `make procurement-demo`
+  runs it against `PAIZIQ_ENDPOINT` using a free OpenAI-compatible model
+  (`GROQ_API_KEY`, `OPENROUTER_API_KEY`, or `GEMINI_API_KEY`). No API key is
+  stored in the repo. Covered by `tests/test_procurement_agent.py`.
+>>>>>>> Stashed changes
 
 - 2026-10-03: Runnable backend deployment package and Azure guide.
   Completed `services/ingest/Dockerfile` (installs the local SDK, runs as a
@@ -259,6 +274,41 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - CI ingest job now installs the SDK (routers import `paiziq` since
   PZ-017) and the SDK examples step runs `payment_agent.py`.
+
+## [0.3.0] - 2026-10-04
+
+### Added
+
+- Site-parity Phase 0: a stdlib SQLite execution ledger with atomic claims,
+  currency-scoped reservations, immutable request/policy/context evidence,
+  bounded review approvals, append-only events, and a durable publication outbox.
+- Explicit `HostedExecutionLedger` connects SDK execution to the backend's
+  shared policy and budget authority. Execution claim, report, reconciliation,
+  and evidence APIs include environment and executor authorization checks.
+- Provider idempotency and receipt lookup protocols, `GatewayOutcome`,
+  `GatewayDeclined`, and `reconcile_payment()`. Unknown results retain their
+  reservation; repeated calls return the original execution without charging.
+- Additive migrations 0009–0011, generated OpenAPI/client contracts, and
+  `make phase0-demo` for SDK-to-dashboard evidence with mock providers.
+- Dashboard execution evidence contract includes committed and reserved spend,
+  immutable snapshots, and ordered events. Legacy external reports remain
+  explicitly unverified; they do not become managed provider confirmations.
+
+### Changed
+
+- Execution rechecks the current request, policy, mandate and budget before
+  sending a payment. Two preapproved $60 payments cannot consume a $100 budget.
+- Hosted decisions include prior spend and reservations. Payment submission
+  supports opt-in scoped idempotency with payload-conflict detection, while
+  preserving the legacy header mode for existing callers.
+- Managed-key environment boundaries also cover webhook endpoint and delivery
+  reads and mutations, including the new execution-event evidence payloads.
+- A provider confirmation followed by a ledger write failure returns success
+  with `accounting_pending=True`; it does not report a failed charge or retry.
+- The default local ledger remains in memory. Restart durability requires a
+  SQLite file or the explicit hosted adapter; a trace endpoint alone does not
+  select hosted execution. Existing gateway and budget-store protocols remain
+  supported, with documented limits for legacy providers and history.
 
 ## [0.2.0] - 2026-06-09
 

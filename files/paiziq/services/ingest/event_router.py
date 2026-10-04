@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 from typing import Any
 
-from ids import now_ms
+from ids import new_id, now_ms
 from stores.webhooks import WebhookStore
 
 
@@ -29,6 +30,81 @@ class EventRouter:
         for ep in endpoints:
             self._webhooks.enqueue(ep["id"], event_type, envelope)
         return len(endpoints)
+
+    def publish_execution_events(self, limit: int = 100) -> int:
+        """Publish durable business events once per endpoint, in one transaction.
+
+        Delivery itself is at least once. Consumers deduplicate the stable event
+        ID; retrying this publisher cannot enqueue a second endpoint delivery.
+        """
+        with self._lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                rows = self._conn.execute(
+                    "SELECT event_id,org_id,env_id,request_id,event_type,recorded_at_ms,payload_json "
+                    "FROM execution_events e WHERE NOT EXISTS (SELECT 1 FROM execution_outbox_ack a "
+                    "WHERE a.event_id=e.event_id AND a.consumer='webhooks') ORDER BY sequence LIMIT ?",
+                    (limit,),
+                ).fetchall()
+                for (
+                    event_id,
+                    org_id,
+                    env_id,
+                    request_id,
+                    kind,
+                    timestamp,
+                    payload,
+                ) in rows:
+                    payment = self._conn.execute(
+                        "SELECT payment_id FROM execution_bindings WHERE org_id=? AND env_id=? AND request_id=?",
+                        (org_id, env_id, request_id),
+                    ).fetchone()
+                    data = {
+                        "request_id": request_id,
+                        "payment_id": payment[0] if payment else request_id,
+                        "org_id": org_id,
+                        "env_id": env_id,
+                        "evidence": json.loads(payload),
+                    }
+                    envelope = {
+                        "id": event_id,
+                        "type": kind,
+                        "created_at_ms": timestamp,
+                        "data": data,
+                    }
+                    endpoints = self._conn.execute(
+                        "SELECT id,events FROM webhook_endpoints WHERE env_id=? AND status='active'",
+                        (env_id,),
+                    ).fetchall()
+                    for endpoint_id, subscriptions in endpoints:
+                        subscribed = json.loads(subscriptions)
+                        if "*" not in subscribed and kind not in subscribed:
+                            continue
+                        ts = now_ms()
+                        self._conn.execute(
+                            "INSERT OR IGNORE INTO webhook_deliveries "
+                            "(id,endpoint_id,event_type,payload,state,attempts,next_attempt_ms,created_at_ms,updated_at_ms,source_event_id) "
+                            "VALUES(?,?,?,?,'pending',0,?,?,?,?)",
+                            (
+                                new_id("whd"),
+                                endpoint_id,
+                                kind,
+                                json.dumps(envelope),
+                                ts,
+                                ts,
+                                ts,
+                                event_id,
+                            ),
+                        )
+                    self._conn.execute(
+                        "INSERT OR IGNORE INTO execution_outbox_ack VALUES(?,'webhooks',?)",
+                        (event_id, now_ms()),
+                    )
+                self._conn.commit()
+                return len(rows)
+            except BaseException:
+                self._conn.rollback()
+                raise
 
     def check_sla_breaches(self) -> int:
         ts = now_ms()

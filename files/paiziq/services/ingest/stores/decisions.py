@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from ids import new_id, now_ms
 
@@ -92,6 +92,7 @@ class DecisionStore:
         verdict: str,
         reasons: list[str],
         risk_flags: list[str],
+        save_context: Optional[Callable[[str], None]] = None,
     ) -> dict[str, Any]:
         decision_id = new_id("dec")
         with self._lock:
@@ -102,7 +103,13 @@ class DecisionStore:
                     json.dumps(reasons), json.dumps(risk_flags), now_ms(),
                 ),
             )
-            self._conn.commit()
+            try:
+                if save_context:
+                    save_context(decision_id)
+                self._conn.commit()
+            except BaseException:
+                self._conn.rollback()
+                raise
         record = self.get(decision_id)
         assert record is not None
         return record
@@ -115,10 +122,13 @@ class DecisionStore:
         return _decision_row(row) if row else None
 
     def list(
-        self, payment_id: Optional[str], limit: int, offset: int
+        self, payment_id: Optional[str], limit: int, offset: int, env_id: Optional[str] = None
     ) -> tuple[list[dict[str, Any]], int]:
         where = "WHERE payment_id = ?" if payment_id else ""
         params: tuple = (payment_id,) if payment_id else ()
+        if env_id is not None:
+            where += (" AND " if where else "WHERE ") + "payment_id IN (SELECT id FROM payments WHERE env_id=?)"
+            params += (env_id,)
         with self._lock:
             total = self._conn.execute(
                 f"SELECT COUNT(*) FROM decisions {where}", params
@@ -370,6 +380,16 @@ class ReviewStore:
                     "last_action = ?, assigned_at_ms = COALESCE(assigned_at_ms, ?), "
                     "resolved_at_ms = ?, updated_at_ms = ? WHERE id = ?",
                     (outcome, reviewer_id, note, outcome, ts, ts, ts, review_id),
+                )
+                from paiziq.execution import SQLiteExecutionLedger
+                scope = self._conn.execute(
+                    "SELECT e.org_id,p.env_id,COALESCE(p.request_id,p.id) FROM payments p "
+                    "JOIN environments e ON e.id=p.env_id WHERE p.id=?", (payment_id,)
+                ).fetchone()
+                SQLiteExecutionLedger(connection=self._conn, lock=self._lock).append_event(
+                    "authorization_" + outcome, scope[2],
+                    {"payment_id": payment_id, "review_id": review_id, "reviewer_id": reviewer_id,
+                     "note": note, "outcome": outcome}, org_id=scope[0], env_id=scope[1], now_ms=ts,
                 )
                 self._conn.commit()
             except Exception:

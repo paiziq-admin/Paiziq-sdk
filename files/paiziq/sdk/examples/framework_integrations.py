@@ -43,4 +43,6 @@ def openai_example(response):
             # Feed the verdict back to the model instead of executing.
             print("Blocked:", blocked.decision.reasons)
             continue
-        # ... dispatch the tool normally — Paiziq approved it ...
+        # For a payment tool, call sdk.execute_payment with its stable request
+        # ID. This guard reviews inputs; it does not reserve or execute money.
+        # Other tools can be dispatched normally.

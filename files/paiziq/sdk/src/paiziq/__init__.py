@@ -21,6 +21,12 @@ from .models import (
     PaymentRequest,
     RiskFlag,
 )
+from .execution import (
+    ExecutionConflict, ExecutionLedger, ExecutionRecord, ClaimResult,
+    GatewayDeclined, GatewayOutcome, IdempotentPaymentGateway,
+    SQLiteExecutionLedger, LedgerBudgetStore, LedgerBudgetTracker,
+)
+from .hosted_execution import HostedExecutionLedger
 from .sdk import PaiziqSDK
 from .tracing.scrub import PIIScrubber, ScrubbingExporter
 from .webhooks import sign_webhook_payload, verify_webhook_signature
@@ -38,10 +44,13 @@ from .tracing.integrations import (
     instrument_payment_tool,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "PaiziqSDK",
+    "ExecutionConflict", "ExecutionLedger", "ExecutionRecord", "ClaimResult",
+    "GatewayDeclined", "GatewayOutcome", "IdempotentPaymentGateway",
+    "SQLiteExecutionLedger", "LedgerBudgetStore", "LedgerBudgetTracker", "HostedExecutionLedger",
     "api_types",
     "PaymentRequest",
     "Mandate",
